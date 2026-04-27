@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>错题本</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="错题本">
+<meta name="theme-color" content="#4f46e5">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #4f46e5;
+  --primary-light: #e0e7ff;
+  --danger: #ef4444;
+  --bg: #f8fafc;
+  --card-bg: #fff;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.07);
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn .spinner { margin-right: 4px; }
+.btn.loading .spinner { display: inline-block; }
+.btn.loading { pointer-events: none; opacity: .7; }
+
+.app { display: flex; height: 100vh; height: 100dvh; }
+
+/* Sidebar */
+.sidebar {
+  width: 220px; background: var(--card-bg); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 20px 16px 12px; font-size: 20px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.sidebar-header .brand { display: flex; align-items: center; gap: 8px; }
+.sidebar-header .icon { width: 28px; height: 28px; background: var(--primary); color: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.sidebar-header .add-subject-btn {
+  width: 28px; height: 28px; border-radius: 6px; border: 1px dashed var(--border);
+  background: none; cursor: pointer; font-size: 16px; display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); transition: all .15s;
+}
+.sidebar-header .add-subject-btn:hover { border-color: var(--primary); color: var(--primary); }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 8px; }
+.sidebar-nav .item {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-radius: 8px; cursor: pointer; font-size: 14px; transition: all .15s;
+  color: var(--text); border: none; background: none; width: 100%; text-align: left;
+  position: relative;
+}
+.sidebar-nav .item:hover { background: var(--primary-light); }
+.sidebar-nav .item.active { background: var(--primary); color: #fff; font-weight: 600; }
+.sidebar-nav .item .count { margin-left: auto; font-size: 12px; opacity: .7; }
+.sidebar-nav .item.active .count { opacity: 1; }
+
+
+.sidebar-footer { padding: 8px; border-top: 1px solid var(--border); }
+.sidebar-footer .manage-btn {
+  width: 100%; padding: 8px; border-radius: 8px; border: none; background: none;
+  cursor: pointer; font-size: 12px; color: var(--text-muted); text-align: center;
+}
+.sidebar-footer .manage-btn:hover { background: var(--bg); }
+.sidebar-footer .sync-status { font-size: 10px; color: var(--text-muted); text-align: center; padding: 4px; }
+.sidebar-footer .sync-status.online { color: #22c55e; }
+.sidebar-footer .sync-status.offline { color: #f97316; }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; background: var(--card-bg); border-bottom: 1px solid var(--border); gap: 12px;
+}
+.toolbar h2 { font-size: 18px; font-weight: 600; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px;
+  border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer;
+  border: none; transition: all .15s; white-space: nowrap;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(1.1); }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+.card {
+  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden; cursor: pointer; transition: all .2s; border: 1px solid var(--border);
+}
+.card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.card-img { width: 100%; height: 180px; object-fit: cover; background: #f1f5f9; }
+.card-body { padding: 14px 16px; }
+.card-subject { display: inline-block; padding: 2px 10px; background: var(--primary-light); color: var(--primary); border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.card-source { font-size: 13px; color: var(--text-muted); margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.card-date { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+.empty { text-align: center; padding: 80px 20px; color: var(--text-muted); }
+.empty .icon { font-size: 48px; margin-bottom: 16px; opacity: .3; }
+.empty p { font-size: 15px; margin-bottom: 16px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal {
+  background: var(--card-bg); border-radius: var(--radius); width: 100%; max-width: 600px;
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.15);
+  animation: modalIn .2s ease;
+}
+@keyframes modalIn { from { opacity: 0; transform: scale(.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card-bg); z-index: 1;
+}
+.modal-header h3 { font-size: 18px; font-weight: 600; }
+.modal-close { width: 32px; height: 32px; border-radius: 8px; border: none; background: none; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.modal-close:hover { background: var(--bg); }
+.modal-body { padding: 24px; }
+
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.form-group input, .form-group textarea, .form-group select {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; font-family: inherit; transition: border-color .15s; background: var(--bg);
+}
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px;
+  text-align: center; cursor: pointer; transition: all .2s; background: var(--bg);
+  min-height: 80px; display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-light); }
+.upload-zone.has-image { padding: 8px; }
+.upload-zone img { max-width: 100%; max-height: 200px; border-radius: 8px; }
+.upload-zone .placeholder { color: var(--text-muted); font-size: 14px; }
+.upload-zone .placeholder .big { font-size: 32px; display: block; margin-bottom: 6px; }
+
+/* Detail view */
+.detail-section { margin-bottom: 20px; }
+.detail-section h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
+.detail-img { width: 100%; border-radius: var(--radius); cursor: zoom-in; }
+.detail-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.detail-tag { padding: 4px 12px; background: var(--bg); border-radius: 20px; font-size: 12px; color: var(--text-muted); }
+
+.answer-box { margin-top: 16px; }
+.answer-blur-wrapper {
+  position: relative; border-radius: var(--radius); overflow: hidden;
+}
+.answer-blur-wrapper img {
+  width: 100%; border-radius: var(--radius); display: block;
+  filter: blur(20px); user-select: none; pointer-events: none; transition: filter .3s;
+}
+.answer-blur-wrapper.revealed img { filter: blur(0); pointer-events: auto; }
+.answer-blur-wrapper .answer-text { padding: 16px; border-radius: 8px; background: #fefce8; border: 1px solid #fde68a; white-space: pre-wrap; filter: blur(8px); user-select: none; transition: filter .3s; }
+.answer-blur-wrapper.revealed .answer-text { filter: blur(0); }
+.answer-blur-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.3); cursor: pointer; transition: opacity .3s;
+}
+.answer-blur-wrapper.revealed .answer-blur-overlay { opacity: 0; pointer-events: none; }
+.answer-blur-overlay .overlay-btn {
+  padding: 10px 20px; background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px; cursor: pointer; box-shadow: var(--shadow-md);
+}
+
+.subject-list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 8px;
+}
+.subject-list-item .name { font-size: 14px; font-weight: 500; }
+.subject-list-item .actions { display: flex; gap: 6px; }
+
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+.subjects-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.subject-chip {
+  padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border);
+  background: var(--card-bg); cursor: pointer; font-size: 14px; transition: all .15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.subject-chip:hover { border-color: var(--primary); }
+.subject-chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Setup screen */
+.setup-container {
+  max-width: 440px; margin: 60px auto; padding: 32px;
+  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow-md);
+}
+.setup-container h2 { font-size: 20px; margin-bottom: 8px; }
+.setup-container .subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+.setup-container code {
+  background: var(--bg); padding: 2px 6px; border-radius: 4px;
+  font-size: 12px; border: 1px solid var(--border);
+}
+.setup-container ol { padding-left: 18px; margin: 12px 0 20px; font-size: 13px; color: var(--text-muted); line-height: 1.8; }
+.setup-container ol a { color: var(--primary); }
+
+@media (max-width: 768px) {
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; flex-shrink: 0; flex-direction: column; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+  .sidebar-header { padding: 12px 16px; font-size: 18px; }
+  .sidebar-nav { display: flex; flex-wrap: wrap; padding: 4px 8px; gap: 4px; align-content: flex-start; }
+  .sidebar-nav .item { width: auto; flex-shrink: 0; white-space: nowrap; padding: 8px 14px; font-size: 13px; }
+
+  .sidebar-footer { display: none; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .card-img { height: 120px; }
+  .toolbar { padding: 12px 16px; }
+  .toolbar h2 { font-size: 16px; }
+  .content { padding: 12px; }
+  .modal { max-width: 100%; border-radius: 16px 16px 0 0; margin-top: auto; max-height: 85dvh; }
+  .modal-body { padding: 16px; }
+  .modal-header { padding: 16px; }
+}
+</style>
+</head>
+<body>
+<!-- Setup screen (hidden after config) -->
+<div id="setupScreen" class="setup-container">
+  <h2>📒 配置错题本</h2>
+  <p class="subtitle">数据存储在 <a href="https://supabase.com" target="_blank">Supabase</a> 云数据库，电脑手机自动同步。</p>
+  <ol>
+    <li>注册 <a href="https://supabase.com" target="_blank">supabase.com</a> 免费账号</li>
+    <li>创建新项目，记下 <code>Project URL</code> 和 <code>anon key</code></li>
+    <li>进入 SQL Editor，运行下方 SQL 创建表</li>
+    <li>填入 URL 和 Key，点击保存</li>
+  </ol>
+  <details style="margin-bottom:20px;font-size:12px;">
+    <summary style="cursor:pointer;color:var(--primary);">📋 点击展开 SQL（复制到 Supabase SQL Editor 运行）</summary>
+    <pre id="setupSQL" style="background:var(--bg);padding:12px;border-radius:8px;overflow:auto;margin-top:8px;font-size:11px;line-height:1.5;border:1px solid var(--border);">CREATE TABLE subjects (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE entries (
+  id SERIAL PRIMARY KEY,
+  subject TEXT NOT NULL,
+  source TEXT DEFAULT '',
+  error_reason TEXT DEFAULT '',
+  screenshot TEXT DEFAULT '',
+  answer_image TEXT DEFAULT '',
+  answer_text TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "allow_all_subjects" ON subjects FOR ALL USING (true);
+CREATE POLICY "allow_all_entries" ON entries FOR ALL USING (true);
+
+-- 如果你已经创建了表，只需要运行这一行：
+-- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_text TEXT DEFAULT '';</pre>
+  </details>
+  <div class="form-group">
+    <label>Supabase Project URL</label>
+    <input type="text" id="supabaseUrl" placeholder="https://xxxxx.supabase.co">
+  </div>
+  <div class="form-group">
+    <label>Supabase Anon Key</label>
+    <input type="text" id="supabaseKey" placeholder="eyJhbG...">
+  </div>
+  <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;justify-content:center;">保存并开始使用</button>
+  <p id="setupError" style="color:var(--danger);font-size:13px;margin-top:8px;display:none;"></p>
+</div>
+
+<!-- Main app (hidden until config saved) -->
+<div class="app" id="mainApp" style="display:none;">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="brand"><span class="icon">📒</span>错题本</span>
+      <button class="add-subject-btn" onclick="openAddSubject()" title="新建科目">+</button>
+    </div>
+    <nav class="sidebar-nav" id="subjectNav">
+      <button class="item active" data-subject="">全部</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sync-status" id="syncStatus">🟢 已同步</div>
+      <button class="manage-btn" onclick="openManageSubjects()">管理科目</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <h2 id="listTitle">全部错题</h2>
+      <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
+    </div>
+    <div class="content" id="content">
+      <div class="empty"><span class="icon">📝</span><p>加载中...</p></div>
+    </div>
+  </main>
+</div>
+
+<!-- Add/Edit Entry Modal -->
+<div class="modal-overlay" id="formModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="formTitle">添加错题</h3>
+      <button class="modal-close" onclick="closeFormModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="entryForm" onsubmit="saveEntry(event)">
+        <div class="form-group">
+          <label>科目</label>
+          <div class="subjects-grid" id="subjectSelector"></div>
+        </div>
+        <div class="form-group">
+          <label>题目截图</label>
+          <div class="upload-zone" id="questionUpload" onclick="document.getElementById('questionFile').click()">
+            <div class="placeholder" id="questionPlaceholder"><span class="big">📷</span>点击或拖拽上传题目截图</div>
+            <img id="questionPreview" style="display:none" alt="题目">
+          </div>
+          <input type="file" id="questionFile" accept="image/*" style="display:none" onchange="handleQuestionFile(event)">
+        </div>
+        <div class="form-group">
+          <label>题目来源</label>
+          <input type="text" id="source" placeholder="如：期中考试、练习册P32">
+        </div>
+        <div class="form-group">
+          <label>错误原因</label>
+          <input type="text" id="errorReason" placeholder="如：计算错误、概念不清、审题失误">
+        </div>
+        <div class="form-group">
+          <label>答案截图</label>
+          <div class="upload-zone" id="answerUpload" onclick="document.getElementById('answerFile').click()">
+            <div class="placeholder" id="answerPlaceholder"><span class="big">🔒</span>点击或拖拽上传答案截图</div>
+            <img id="answerPreview" style="display:none" alt="答案">
+          </div>
+          <input type="file" id="answerFile" accept="image/*" style="display:none" onchange="handleAnswerFile(event)">
+        </div>
+        <div class="form-group">
+          <label>答案文字 <span style="font-weight:400;color:var(--text-muted);">（可选，与截图二选一或都填）</span></label>
+          <textarea id="answerText" rows="3" placeholder="输入正确答案"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeFormModal()">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>错题详情</h3>
+      <button class="modal-close" onclick="closeDetailModal()">×</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- Add Subject Modal -->
+<div class="modal-overlay" id="subjectModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>新建科目</h3>
+      <button class="modal-close" onclick="closeSubjectModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form onsubmit="addSubject(event)">
+        <div class="form-group">
+          <label>科目名称</label>
+          <input type="text" id="newSubjectName" placeholder="如：电路、力学、函数" required autofocus>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeSubjectModal()">取消</button>
+          <button type="submit" class="btn btn-primary">创建</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Subjects Modal -->
+<div class="modal-overlay" id="manageModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>管理科目</h3>
+      <button class="modal-close" onclick="closeManageModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="manageSubjectList"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" onclick="closeManageModal(); openAddSubject();">+ 新建科目</button>
+        <button type="button" class="btn btn-ghost" onclick="closeManageModal()">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Config ---
+const CONFIG_KEY = 'cuotiben_config';
+
+function getConfig() {
+  const raw = localStorage.getItem(CONFIG_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function saveConfig() {
+  const url = document.getElementById('supabaseUrl').value.trim();
+  const key = document.getElementById('supabaseKey').value.trim();
+  const errEl = document.getElementById('setupError');
+  if (!url || !key) { errEl.textContent = '请填写 URL 和 Key'; errEl.style.display = 'block'; return; }
+  if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
+    errEl.textContent = 'URL 格式不对，应该类似 https://xxxxx.supabase.co'; errEl.style.display = 'block'; return;
+  }
+  if (key.length < 20) {
+    errEl.textContent = 'Key 太短了，检查是否复制完整'; errEl.style.display = 'block'; return;
+  }
+  localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: url.replace(/\/$/, ''), key }));
+  errEl.style.display = 'none';
+  // Test connection
+  const btn = document.querySelector('#setupScreen .btn-primary');
+  btn.textContent = '验证中...';
+  btn.disabled = true;
+  testConnection(url, key).then(ok => {
+    if (ok) initApp();
+    else {
+      errEl.textContent = '连接失败，检查 URL 和 Key 是否正确';
+      errEl.style.display = 'block';
+      btn.textContent = '保存并开始使用';
+      btn.disabled = false;
+    }
+  });
+}
+
+async function testConnection(url, key) {
+  try {
+    const res = await fetch(`${url.replace(/\/$/, '')}/rest/v1/subjects?select=name&limit=1`, {
+      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clearConfig() {
+  localStorage.removeItem(CONFIG_KEY);
+  location.reload();
+}
+
+// --- Supabase REST client ---
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+
+function initSupabase() {
+  const config = getConfig();
+  if (!config) return false;
+  SUPABASE_URL = config.url;
+  SUPABASE_KEY = config.key;
+  return true;
+}
+
+async function supFetch(path, options = {}) {
+  const url = `${SUPABASE_URL}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(`API error ${res.status}: ${text}`);
+    err.status = res.status;
+    throw err;
+  }
+  if (res.status === 204 || res.status === 201) {
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  }
+  return res.json();
+}
+
+// --- Data layer ---
+async function dbGetSubjects() {
+  const data = await supFetch('/rest/v1/subjects?select=name&order=name.asc');
+  return data.map(s => s.name);
+}
+
+async function dbAddSubject(name) {
+  try {
+    await supFetch('/rest/v1/subjects', {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    });
+  } catch (err) {
+    if (err.status === 409) throw new Error('科目已存在');
+    throw err;
+  }
+}
+
+async function dbDeleteSubject(name) {
+  await supFetch(`/rest/v1/entries?subject=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
+  await supFetch(`/rest/v1/subjects?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+async function dbAdd(entry) {
+  const data = await supFetch('/rest/v1/entries?select=id', {
+    method: 'POST',
+    headers: { 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      subject: entry.subject,
+      source: entry.source,
+      error_reason: entry.errorReason,
+      screenshot: entry.screenshot,
+      answer_image: entry.answerImage,
+      answer_text: entry.answerText,
+      created_at: new Date().toISOString(),
+    }),
+  });
+  return data[0].id;
+}
+
+async function dbGetAll() {
+  const data = await supFetch('/rest/v1/entries?select=*&order=created_at.desc');
+  return data.map(e => ({
+    id: e.id,
+    subject: e.subject,
+    source: e.source || '',
+    errorReason: e.error_reason || '',
+    screenshot: e.screenshot || '',
+    answerImage: e.answer_image || '',
+    answerText: e.answer_text || '',
+    createdAt: new Date(e.created_at).getTime(),
+  }));
+}
+
+async function dbDelete(id) {
+  await supFetch(`/rest/v1/entries?id=eq.${id}`, { method: 'DELETE' });
+}
+
+// --- Network status ---
+function updateSyncStatus() {
+  const el = document.getElementById('syncStatus');
+  if (el) {
+    if (navigator.onLine) {
+      el.textContent = '🟢 已同步';
+      el.className = 'sync-status online';
+    } else {
+      el.textContent = '🟠 离线中';
+      el.className = 'sync-status offline';
+    }
+  }
+}
+window.addEventListener('online', () => { updateSyncStatus(); renderAll(); });
+window.addEventListener('offline', updateSyncStatus);
+
+// --- App state ---
+let currentFilter = '';
+let currentQuestionData = null;
+let currentAnswerData = null;
+let selectedSubject = null;
+let entryCache = new Map();
+
+// --- Init ---
+function initApp() {
+  if (!initSupabase()) {
+    document.getElementById('setupScreen').style.display = '';
+    document.getElementById('mainApp').style.display = 'none';
+    return;
+  }
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'flex';
+  updateSyncStatus();
+  renderAll().catch(err => {
+    console.error('Init error:', err);
+    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>加载失败: ${escapeHtml(err.message)}</p><button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button><button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重新配置</button></div>`;
+  });
+}
+
+// Check config on load
+if (getConfig()) {
+  initApp();
+}
+
+// --- File handling ---
+function setupUploadZone(zoneId, fileInputId, previewId, placeholderId, stateKey) {
+  const zone = document.getElementById(zoneId);
+
+  zone.addEventListener('click', () => document.getElementById(fileInputId).click());
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => { zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) readImage(file, stateKey);
+  });
+}
+
+function readImage(file, stateKey) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const data = e.target.result;
+    if (stateKey === 'question') currentQuestionData = data;
+    else currentAnswerData = data;
+    document.getElementById(stateKey === 'question' ? 'questionPreview' : 'answerPreview').src = data;
+    document.getElementById(stateKey === 'question' ? 'questionPreview' : 'answerPreview').style.display = 'block';
+    document.getElementById(stateKey === 'question' ? 'questionPlaceholder' : 'answerPlaceholder').style.display = 'none';
+    document.getElementById(stateKey === 'question' ? 'questionUpload' : 'answerUpload').classList.add('has-image');
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleQuestionFile(e) {
+  const file = e.target.files[0];
+  if (file) readImage(file, 'question');
+}
+
+function handleAnswerFile(e) {
+  const file = e.target.files[0];
+  if (file) readImage(file, 'answer');
+}
+
+// Bind drag events when modal opens
+function bindUploadZones() {
+  setupUploadZone('questionUpload', 'questionFile', 'questionPreview', 'questionPlaceholder', 'question');
+  setupUploadZone('answerUpload', 'answerFile', 'answerPreview', 'answerPlaceholder', 'answer');
+}
+
+// --- Subject Modal ---
+function openAddSubject() {
+  document.getElementById('newSubjectName').value = '';
+  document.getElementById('subjectModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('newSubjectName').focus(), 100);
+}
+
+function closeSubjectModal() {
+  document.getElementById('subjectModal').style.display = 'none';
+}
+
+async function addSubject(e) {
+  e.preventDefault();
+  const name = document.getElementById('newSubjectName').value.trim();
+  if (!name) return;
+  try {
+    await dbAddSubject(name);
+    closeSubjectModal();
+    renderAll();
+  } catch (err) {
+    alert(err.message || '创建失败');
+  }
+}
+
+// --- Manage Subjects ---
+async function openManageSubjects() {
+  try {
+    const subjects = await dbGetSubjects();
+    const list = document.getElementById('manageSubjectList');
+    if (subjects.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">还没有科目</p>';
+    } else {
+      list.innerHTML = subjects.map(s => `
+        <div class="subject-list-item">
+          <span class="name">${escapeHtml(s)}</span>
+          <div class="actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteSubjectConfirm('${s.replace(/'/g, "\\'")}')">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    document.getElementById('manageModal').style.display = 'flex';
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
+}
+
+function closeManageModal() {
+  document.getElementById('manageModal').style.display = 'none';
+}
+
+async function deleteSubjectConfirm(name) {
+  try {
+    const entries = await dbGetAll();
+    const count = entries.filter(e => e.subject === name).length;
+    const msg = count > 0
+      ? `确定删除科目「${name}」及其下的 ${count} 道错题吗？`
+      : `确定删除科目「${name}」吗？`;
+    if (!confirm(msg)) return;
+    await dbDeleteSubject(name);
+    if (currentFilter === name) currentFilter = '';
+    renderAll();
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+// --- Form Modal ---
+async function openAddModal() {
+  if (!navigator.onLine) { alert('当前离线，无法添加错题'); return; }
+  try {
+    const subjects = await dbGetSubjects();
+    if (subjects.length === 0) {
+      alert('请先创建科目');
+      openAddSubject();
+      return;
+    }
+
+    document.getElementById('formTitle').textContent = '添加错题';
+    document.getElementById('source').value = '';
+    document.getElementById('errorReason').value = '';
+    document.getElementById('answerText').value = '';
+
+    document.getElementById('questionPreview').style.display = 'none';
+    document.getElementById('questionPlaceholder').style.display = '';
+    document.getElementById('questionUpload').classList.remove('has-image');
+    currentQuestionData = null;
+
+    document.getElementById('answerPreview').style.display = 'none';
+    document.getElementById('answerPlaceholder').style.display = '';
+    document.getElementById('answerUpload').classList.remove('has-image');
+    currentAnswerData = null;
+
+    bindUploadZones();
+
+    selectedSubject = subjects[0];
+    renderSubjectSelector(subjects);
+
+    document.getElementById('formModal').style.display = 'flex';
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
+}
+
+function renderSubjectSelector(subjects) {
+  const el = document.getElementById('subjectSelector');
+  el.innerHTML = subjects.map(s => `
+    <button type="button" class="subject-chip${s === selectedSubject ? ' selected' : ''}" onclick="selectSubject('${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>
+  `).join('');
+}
+
+async function selectSubject(name) {
+  selectedSubject = name;
+  const subjects = await dbGetSubjects();
+  renderSubjectSelector(subjects);
+}
+
+function closeFormModal() {
+  document.getElementById('formModal').style.display = 'none';
+}
+
+async function saveEntry(e) {
+  e.preventDefault();
+  if (!selectedSubject) return alert('请选择科目');
+  const btn = document.getElementById('saveBtn');
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spinner"></span>保存中...';
+  try {
+    const entry = {
+      subject: selectedSubject,
+      source: document.getElementById('source').value.trim(),
+      errorReason: document.getElementById('errorReason').value.trim(),
+      screenshot: currentQuestionData || '',
+      answerImage: currentAnswerData || '',
+      answerText: document.getElementById('answerText').value.trim(),
+    };
+    await dbAdd(entry);
+    closeFormModal();
+    renderAll();
+  } catch (err) {
+    alert('保存失败: ' + err.message);
+  } finally {
+    btn.classList.remove('loading');
+    btn.innerHTML = '保存';
+  }
+}
+
+// --- Detail Modal ---
+function openDetail(entry) {
+  const body = document.getElementById('detailBody');
+  body.innerHTML = `
+    ${entry.screenshot ? `
+    <div class="detail-section">
+      <h4>📷 题目</h4>
+      <img class="detail-img" src="${entry.screenshot}" alt="题目截图" onclick="this.requestFullscreen?.()">
+    </div>` : ''}
+    <div class="detail-meta">
+      <span class="detail-tag">📚 ${escapeHtml(entry.subject)}</span>
+      ${entry.source ? `<span class="detail-tag">📄 ${escapeHtml(entry.source)}</span>` : ''}
+      ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
+      <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
+    </div>
+    ${entry.answerText || entry.answerImage ? `
+    <div class="answer-box">
+      <div class="detail-section"><h4>🔒 答案</h4></div>
+      <div class="answer-blur-wrapper" id="answerWrapper">
+        ${entry.answerText ? `<div class="answer-text" id="answerTextContent">${escapeHtml(entry.answerText)}</div>` : ''}
+        ${entry.answerImage ? `<img src="${entry.answerImage}" alt="答案截图" style="margin-top:${entry.answerText ? '8px' : '0'}">` : ''}
+        <div class="answer-blur-overlay" id="answerOverlay" onclick="revealAnswer()">
+          <button class="overlay-btn">👁️ 点击查看答案</button>
+        </div>
+      </div>
+    </div>` : '<p style="color:var(--text-muted);font-size:14px;">未填写答案</p>'}
+    <div class="form-actions">
+      <button class="btn btn-danger" onclick="deleteEntry(${entry.id})">🗑️ 删除</button>
+      <button class="btn btn-ghost" onclick="closeDetailModal()">关闭</button>
+    </div>
+  `;
+  document.getElementById('detailModal').style.display = 'flex';
+}
+
+function revealAnswer() {
+  document.getElementById('answerWrapper').classList.add('revealed');
+}
+
+function closeDetailModal() {
+  document.getElementById('detailModal').style.display = 'none';
+}
+
+async function deleteEntry(id) {
+  if (!confirm('确定要删除这道错题吗？')) return;
+  try {
+    await dbDelete(id);
+    closeDetailModal();
+    renderAll();
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+// --- Render ---
+async function renderAll() {
+  try {
+    await renderSidebar();
+    await renderList();
+    updateAddButton();
+    updateSyncStatus();
+  } catch (err) {
+    console.error('Render error:', err);
+    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>加载失败: ${escapeHtml(err.message)}</p><button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button><button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重置配置</button></div>`;
+  }
+}
+
+async function renderSidebar() {
+  const [subjects, entries] = await Promise.all([dbGetSubjects(), dbGetAll()]);
+  const counts = {};
+  entries.forEach(e => { counts[e.subject] = (counts[e.subject] || 0) + 1; });
+  subjects.forEach(s => { if (!counts[s]) counts[s] = 0; });
+
+  const nav = document.getElementById('subjectNav');
+  nav.innerHTML = `<button class="item${currentFilter === '' ? ' active' : ''}" onclick="setFilter('')">全部<span class="count">${entries.length}</span></button>`;
+  Object.entries(counts).forEach(([s, c]) => {
+    const escaped = s.replace(/'/g, "\\'");
+    nav.innerHTML += `<button class="item${currentFilter === s ? ' active' : ''}" onclick="setFilter('${escaped}')" oncontextmenu="event.preventDefault();deleteSubjectConfirm('${escaped}')" ontouchstart="longPressStart(event,'${escaped}')" ontouchend="longPressEnd()" ontouchmove="longPressEnd()">${escapeHtml(s)}<span class="count">${c}</span></button>`;
+  });
+}
+
+let longPressTimer;
+
+function longPressStart(e, subject) {
+  longPressTimer = setTimeout(() => {
+    if (e.target?.closest('.item')) deleteSubjectConfirm(subject);
+  }, 600);
+}
+
+function longPressEnd() {
+  clearTimeout(longPressTimer);
+}
+
+async function renderList() {
+  const entries = await dbGetAll();
+  const filtered = currentFilter ? entries.filter(e => e.subject === currentFilter) : entries;
+  const content = document.getElementById('content');
+  document.getElementById('listTitle').textContent = currentFilter ? `${currentFilter} · 错题` : '全部错题';
+
+  if (filtered.length === 0) {
+    content.innerHTML = `<div class="empty"><span class="icon">📝</span><p>${currentFilter ? '该科目下还没有错题' : '还没有错题，先创建科目再添加'}</p>${currentFilter ? `<button class="btn btn-primary btn-sm" onclick="openAddModal()">添加错题</button>` : `<button class="btn btn-primary btn-sm" onclick="openAddSubject()">创建科目</button>`}</div>`;
+    return;
+  }
+
+  entryCache.clear();
+  content.innerHTML = `<div class="grid">${filtered.map(e => {
+    entryCache.set(e.id, e);
+    return `
+    <div class="card" onclick="openDetailById(${e.id})">
+      ${e.screenshot ? `<img class="card-img" src="${e.screenshot}" alt="题目" loading="lazy">` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">无截图</div>'}
+      <div class="card-body">
+        <span class="card-subject">${escapeHtml(e.subject)}</span>
+        ${e.source ? `<div class="card-source">📄 ${escapeHtml(e.source)}</div>` : ''}
+        ${e.errorReason ? `<div class="card-source">⚠️ ${escapeHtml(e.errorReason)}</div>` : ''}
+        <div class="card-date">${new Date(e.createdAt).toLocaleString('zh-CN')}</div>
+      </div>
+    </div>
+  `}).join('')}</div>`;
+}
+
+function openDetailById(id) {
+  openDetail(entryCache.get(id));
+}
+
+function setFilter(subject) {
+  currentFilter = subject;
+  renderAll();
+}
+
+async function updateAddButton() {
+  try {
+    const subjects = await dbGetSubjects();
+    document.getElementById('addEntryBtn').disabled = subjects.length === 0;
+  } catch (e) { /* ignore */ }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Close modals on overlay click
+['formModal','detailModal','subjectModal','manageModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) {
+      if (id === 'formModal') closeFormModal();
+      else if (id === 'detailModal') closeDetailModal();
+      else if (id === 'subjectModal') closeSubjectModal();
+      else closeManageModal();
+    }
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modals = [
+      { id: 'detailModal', close: closeDetailModal },
+      { id: 'formModal', close: closeFormModal },
+      { id: 'manageModal', close: closeManageModal },
+      { id: 'subjectModal', close: closeSubjectModal },
+    ];
+    for (const m of modals) {
+      if (document.getElementById(m.id).style.display === 'flex') {
+        m.close(); return;
+      }
+    }
+  }
+});
+
+// PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
