@@ -199,6 +199,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .subject-chip:hover { border-color: var(--primary); }
 .subject-chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+.source-bar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 24px;
+  background: var(--card-bg); border-bottom: 1px solid var(--border);
+  overflow-x: auto; flex-wrap: nowrap; min-height: 40px;
+}
+.source-bar .label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; margin-right: 4px; }
+.source-chip {
+  flex-shrink: 0; padding: 4px 12px; border-radius: 16px; border: 1px solid var(--border);
+  background: transparent; cursor: pointer; font-size: 12px; transition: all .15s;
+  color: var(--text-muted);
+}
+.source-chip:hover { border-color: var(--primary); color: var(--primary); }
+.source-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
 /* Setup screen */
 .setup-container {
   max-width: 440px; margin: 60px auto; padding: 32px;
@@ -303,6 +317,7 @@ CREATE POLICY "allow_all_entries" ON entries FOR ALL USING (true);
       <h2 id="listTitle">全部错题</h2>
       <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
     </div>
+    <div class="source-bar" id="sourceBar"></div>
     <div class="content" id="content">
       <div class="empty"><span class="icon">📝</span><p>加载中...</p></div>
     </div>
@@ -886,9 +901,23 @@ function longPressEnd() {
 
 async function renderList() {
   const entries = await dbGetAll();
-  const filtered = currentFilter ? entries.filter(e => e.subject === currentFilter) : entries;
+  let filtered = currentFilter ? entries.filter(e => e.subject === currentFilter) : entries;
   const content = document.getElementById('content');
   document.getElementById('listTitle').textContent = currentFilter ? `${currentFilter} · 错题` : '全部错题';
+
+  // Source filter bar
+  const sources = [...new Set(filtered.filter(e => e.source).map(e => e.source))].sort();
+  const bar = document.getElementById('sourceBar');
+  if (sources.length > 0) {
+    bar.innerHTML = `<span class="label">来源:</span><button class="source-chip${!currentSourceFilter ? ' active' : ''}" onclick="setSourceFilter('')">全部</button>${sources.map(s => `<button class="source-chip${currentSourceFilter === s ? ' active' : ''}" onclick="setSourceFilter('${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>`).join('')}`;
+  } else {
+    bar.innerHTML = '';
+  }
+
+  // Apply source filter
+  if (currentSourceFilter) {
+    filtered = filtered.filter(e => e.source === currentSourceFilter);
+  }
 
   if (filtered.length === 0) {
     content.innerHTML = `<div class="empty"><span class="icon">📝</span><p>${currentFilter ? '该科目下还没有错题' : '还没有错题，先创建科目再添加'}</p>${currentFilter ? `<button class="btn btn-primary btn-sm" onclick="openAddModal()">添加错题</button>` : `<button class="btn btn-primary btn-sm" onclick="openAddSubject()">创建科目</button>`}</div>`;
@@ -917,6 +946,12 @@ function openDetailById(id) {
 
 function setFilter(subject) {
   currentFilter = subject;
+  currentSourceFilter = '';
+  renderAll();
+}
+
+function setSourceFilter(source) {
+  currentSourceFilter = source;
   renderAll();
 }
 
