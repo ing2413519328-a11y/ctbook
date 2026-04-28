@@ -192,6 +192,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   background: rgba(255,255,255,.3); cursor: pointer; transition: opacity .3s;
 }
 .answer-blur-wrapper.revealed .answer-blur-overlay { opacity: 0; pointer-events: none; }
+
+.hint-blur-wrapper {
+  position: relative; border-radius: var(--radius); overflow: hidden;
+}
+.hint-blur-wrapper .hint-text {
+  padding: 12px 16px; border-radius: 8px; background: #ede9fe; border: 1px solid #c4b5fd;
+  white-space: pre-wrap; filter: blur(8px); user-select: none; transition: filter .3s;
+  font-size: 14px;
+}
+.hint-blur-wrapper.revealed .hint-text { filter: blur(0); }
+.hint-blur-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.2); cursor: pointer; transition: opacity .3s;
+}
+.hint-blur-wrapper.revealed .hint-blur-overlay { opacity: 0; pointer-events: none; }
+
 .answer-blur-overlay .overlay-btn {
   padding: 10px 20px; background: var(--card-bg); border: 1px solid var(--border);
   border-radius: 8px; font-size: 14px; cursor: pointer; box-shadow: var(--shadow-md);
@@ -296,6 +312,7 @@ CREATE TABLE entries (
   answer_image TEXT DEFAULT '',
   answer_images JSONB DEFAULT '[]'::jsonb,
   answer_text TEXT DEFAULT '',
+  hint TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -319,6 +336,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
 -- 如果你已经创建了表，只需要运行下面这几行：
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_text TEXT DEFAULT '';
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_images JSONB DEFAULT '[]'::jsonb;
+-- ALTER TABLE entries ADD COLUMN IF NOT EXISTS hint TEXT DEFAULT '';
 --
 -- CREATE TABLE sources (
 --   id SERIAL PRIMARY KEY,
@@ -406,6 +424,10 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
         <div class="form-group">
           <label>错误原因</label>
           <input type="text" id="errorReason" placeholder="如：计算错误、概念不清、审题失误">
+        </div>
+        <div class="form-group">
+          <label>提示 <span style="font-weight:400;color:var(--text-muted);">（复习时可选择查看）</span></label>
+          <textarea id="hint" rows="2" placeholder="如：注意单位换算、考虑边界条件…"></textarea>
         </div>
         <div class="form-group">
           <label>答案截图 <span style="font-weight:400;color:var(--text-muted);">（可上传多张）</span></label>
@@ -660,6 +682,7 @@ async function dbAdd(entry) {
       answer_image: entry.answerImage,
       answer_images: entry.answerImages || [],
       answer_text: entry.answerText,
+      hint: entry.hint || '',
       created_at: new Date().toISOString(),
     }),
   });
@@ -677,6 +700,7 @@ async function dbGetAll() {
     answerImage: e.answer_image || '',
     answerImages: e.answer_images || [],
     answerText: e.answer_text || '',
+    hint: e.hint || '',
     createdAt: new Date(e.created_at).getTime(),
   }));
 }
@@ -1031,6 +1055,7 @@ async function openAddModal() {
 
     document.getElementById('formTitle').textContent = '添加错题';
     document.getElementById('errorReason').value = '';
+    document.getElementById('hint').value = '';
     document.getElementById('answerText').value = '';
 
     document.getElementById('questionPreview').style.display = 'none';
@@ -1103,6 +1128,7 @@ async function saveEntry(e) {
       subject: selectedSubject,
       source: selectedSource,
       errorReason: document.getElementById('errorReason').value.trim(),
+      hint: document.getElementById('hint').value.trim(),
       screenshot: currentQuestionData || '',
       answerImage: currentAnswerImages.length > 0 ? currentAnswerImages[0] : '',
       answerImages: currentAnswerImages,
@@ -1134,6 +1160,16 @@ function openDetail(entry) {
       ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
       <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
     </div>
+    ${entry.hint ? `
+    <div class="detail-section">
+      <h4>💡 提示</h4>
+      <div class="hint-blur-wrapper" id="hintWrapper">
+        <div class="hint-text">${escapeHtml(entry.hint)}</div>
+        <div class="hint-blur-overlay" onclick="revealHint()">
+          <button class="overlay-btn">👁️ 查看提示</button>
+        </div>
+      </div>
+    </div>` : ''}
     ${entry.answerText || (entry.answerImages && entry.answerImages.length > 0) || entry.answerImage ? `
     <div class="answer-box">
       <div class="detail-section"><h4>🔒 答案</h4></div>
@@ -1169,6 +1205,10 @@ function openDetail(entry) {
 
 function revealAnswer() {
   document.getElementById('answerWrapper').classList.add('revealed');
+}
+
+function revealHint() {
+  document.getElementById('hintWrapper').classList.add('revealed');
 }
 
 function closeDetailModal() {
