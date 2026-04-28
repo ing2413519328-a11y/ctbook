@@ -281,6 +281,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE sources (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE entries (
   id SERIAL PRIMARY KEY,
   subject TEXT NOT NULL,
@@ -288,6 +294,7 @@ CREATE TABLE entries (
   error_reason TEXT DEFAULT '',
   screenshot TEXT DEFAULT '',
   answer_image TEXT DEFAULT '',
+  answer_images JSONB DEFAULT '[]'::jsonb,
   answer_text TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -300,15 +307,26 @@ CREATE TABLE reviews (
 );
 
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "allow_all_subjects" ON subjects FOR ALL USING (true);
+CREATE POLICY "allow_all_sources" ON sources FOR ALL USING (true);
 CREATE POLICY "allow_all_entries" ON entries FOR ALL USING (true);
 CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
 
 -- 如果你已经创建了表，只需要运行下面这几行：
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_text TEXT DEFAULT '';
+-- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_images JSONB DEFAULT '[]'::jsonb;
+--
+-- CREATE TABLE sources (
+--   id SERIAL PRIMARY KEY,
+--   name TEXT UNIQUE NOT NULL,
+--   created_at TIMESTAMPTZ DEFAULT NOW()
+-- );
+-- ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "allow_all_sources" ON sources FOR ALL USING (true);
 --
 -- CREATE TABLE reviews (
 --   id SERIAL PRIMARY KEY,
@@ -344,6 +362,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
     <div class="sidebar-footer">
       <div class="sync-status" id="syncStatus">🟢 已同步</div>
       <button class="manage-btn" onclick="openManageSubjects()">管理科目</button>
+      <button class="manage-btn" onclick="openManageSources()">管理来源</button>
     </div>
   </aside>
   <main class="main">
@@ -381,19 +400,20 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
         </div>
         <div class="form-group">
           <label>题目来源</label>
-          <input type="text" id="source" placeholder="如：期中考试、练习册P32">
+          <div class="subjects-grid" id="sourceSelector" style="margin-bottom:4px;"></div>
+          <div style="font-size:12px;"><a href="#" onclick="event.preventDefault();openManageSources()" style="color:var(--primary);">管理来源</a></div>
         </div>
         <div class="form-group">
           <label>错误原因</label>
           <input type="text" id="errorReason" placeholder="如：计算错误、概念不清、审题失误">
         </div>
         <div class="form-group">
-          <label>答案截图</label>
-          <div class="upload-zone" id="answerUpload" onclick="document.getElementById('answerFile').click()">
+          <label>答案截图 <span style="font-weight:400;color:var(--text-muted);">（可上传多张）</span></label>
+          <div class="upload-zone" id="answerUpload">
             <div class="placeholder" id="answerPlaceholder"><span class="big">🔒</span>点击或拖拽上传答案截图</div>
-            <img id="answerPreview" style="display:none" alt="答案">
+            <div id="answerPreviewContainer" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;"></div>
           </div>
-          <input type="file" id="answerFile" accept="image/*" style="display:none" onchange="handleAnswerFile(event)">
+          <input type="file" id="answerFile" accept="image/*" multiple style="display:none" onchange="handleAnswerFiles(event)">
         </div>
         <div class="form-group">
           <label>答案文字 <span style="font-weight:400;color:var(--text-muted);">（可选，与截图二选一或都填）</span></label>
@@ -453,6 +473,28 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
       <div class="form-actions">
         <button type="button" class="btn btn-primary" onclick="closeManageModal(); openAddSubject();">+ 新建科目</button>
         <button type="button" class="btn btn-ghost" onclick="closeManageModal()">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Sources Modal -->
+<div class="modal-overlay" id="manageSourcesModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>管理来源</h3>
+      <button class="modal-close" onclick="closeManageSourcesModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form onsubmit="addSource(event)">
+        <div class="form-group" style="display:flex;gap:8px;">
+          <input type="text" id="newSourceName" placeholder="输入新来源名称" required autofocus style="flex:1;">
+          <button type="submit" class="btn btn-primary btn-sm">添加</button>
+        </div>
+      </form>
+      <div id="manageSourceList" style="margin-top:16px;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeManageSourcesModal()">完成</button>
       </div>
     </div>
   </div>
@@ -579,6 +621,33 @@ async function dbDeleteSubject(name) {
   await supFetch(`/rest/v1/subjects?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
+async function dbGetSources() {
+  const data = await supFetch('/rest/v1/sources?select=name&order=name.asc');
+  return data.map(s => s.name);
+}
+
+async function dbAddSource(name) {
+  try {
+    await supFetch('/rest/v1/sources', {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    });
+  } catch (err) {
+    if (err.status === 409) throw new Error('来源已存在');
+    throw err;
+  }
+}
+
+async function dbDeleteSource(name) {
+  // Clear source field for entries with this source
+  await supFetch(`/rest/v1/entries?source=eq.${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ source: '' })
+  });
+  await supFetch(`/rest/v1/sources?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
 async function dbAdd(entry) {
   const data = await supFetch('/rest/v1/entries?select=id', {
     method: 'POST',
@@ -589,6 +658,7 @@ async function dbAdd(entry) {
       error_reason: entry.errorReason,
       screenshot: entry.screenshot,
       answer_image: entry.answerImage,
+      answer_images: entry.answerImages || [],
       answer_text: entry.answerText,
       created_at: new Date().toISOString(),
     }),
@@ -605,6 +675,7 @@ async function dbGetAll() {
     errorReason: e.error_reason || '',
     screenshot: e.screenshot || '',
     answerImage: e.answer_image || '',
+    answerImages: e.answer_images || [],
     answerText: e.answer_text || '',
     createdAt: new Date(e.created_at).getTime(),
   }));
@@ -678,7 +749,8 @@ let reviewStatsCache = {};
 let currentFilter = '';
 let currentSourceFilter = '';
 let currentQuestionData = null;
-let currentAnswerData = null;
+let currentAnswerImages = [];
+let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
 
@@ -741,11 +813,10 @@ function readImage(file, stateKey) {
   reader.onload = (e) => {
     const data = e.target.result;
     if (stateKey === 'question') currentQuestionData = data;
-    else currentAnswerData = data;
-    document.getElementById(stateKey === 'question' ? 'questionPreview' : 'answerPreview').src = data;
-    document.getElementById(stateKey === 'question' ? 'questionPreview' : 'answerPreview').style.display = 'block';
-    document.getElementById(stateKey === 'question' ? 'questionPlaceholder' : 'answerPlaceholder').style.display = 'none';
-    document.getElementById(stateKey === 'question' ? 'questionUpload' : 'answerUpload').classList.add('has-image');
+    document.getElementById('questionPreview').src = data;
+    document.getElementById('questionPreview').style.display = 'block';
+    document.getElementById('questionPlaceholder').style.display = 'none';
+    document.getElementById('questionUpload').classList.add('has-image');
   };
   reader.readAsDataURL(file);
 }
@@ -755,15 +826,70 @@ function handleQuestionFile(e) {
   if (file) readImage(file, 'question');
 }
 
-function handleAnswerFile(e) {
-  const file = e.target.files[0];
-  if (file) readImage(file, 'answer');
+// --- Multi-image answer handling ---
+function handleAnswerFiles(e) {
+  const files = e.target.files;
+  let loaded = 0;
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const reader = new FileReader();
+    reader.index = loaded;
+    reader.onload = (ev) => {
+      currentAnswerImages.push(ev.target.result);
+      loaded++;
+      if (loaded === files.length) renderAnswerPreviews();
+    };
+    reader.readAsDataURL(file);
+    loaded++;
+  }
+  e.target.value = '';
+  renderAnswerPreviews();
+}
+
+function removeAnswerImage(index) {
+  currentAnswerImages.splice(index, 1);
+  renderAnswerPreviews();
+}
+
+function renderAnswerPreviews() {
+  const zone = document.getElementById('answerUpload');
+  const container = document.getElementById('answerPreviewContainer');
+  const placeholder = document.getElementById('answerPlaceholder');
+
+  if (currentAnswerImages.length === 0) {
+    placeholder.style.display = '';
+    container.innerHTML = '';
+    zone.classList.remove('has-image');
+    return;
+  }
+
+  placeholder.style.display = 'none';
+  zone.classList.add('has-image');
+  container.innerHTML = currentAnswerImages.map((img, i) =>
+    `<div style="position:relative;display:inline-block;margin:4px;">
+      <img src="${img}" style="height:80px;width:80px;border-radius:6px;object-fit:cover;border:1px solid var(--border);">
+      <button type="button" onclick="removeAnswerImage(${i})" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>
+    </div>`
+  ).join('');
 }
 
 // Bind drag events when modal opens
 function bindUploadZones() {
   setupUploadZone('questionUpload', 'questionFile', 'questionPreview', 'questionPlaceholder', 'question');
-  setupUploadZone('answerUpload', 'answerFile', 'answerPreview', 'answerPlaceholder', 'answer');
+  // Answer zone: custom drag support for multi-image
+  const az = document.getElementById('answerUpload');
+  az.addEventListener('dragover', (e) => { e.preventDefault(); az.classList.add('dragover'); });
+  az.addEventListener('dragleave', () => { az.classList.remove('dragover'); });
+  az.addEventListener('drop', (e) => {
+    e.preventDefault();
+    az.classList.remove('dragover');
+    for (const file of e.dataTransfer.files) {
+      if (!file.type.startsWith('image/')) continue;
+      const reader = new FileReader();
+      reader.onload = (ev) => { currentAnswerImages.push(ev.target.result); renderAnswerPreviews(); };
+      reader.readAsDataURL(file);
+    }
+  });
 }
 
 // --- Subject Modal ---
@@ -833,6 +959,65 @@ async function deleteSubjectConfirm(name) {
   }
 }
 
+// --- Source Management ---
+async function openManageSources() {
+  try {
+    const sources = await dbGetSources();
+    const list = document.getElementById('manageSourceList');
+    if (sources.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">还没有来源</p>';
+    } else {
+      list.innerHTML = sources.map(s => `
+        <div class="subject-list-item">
+          <span class="name">${escapeHtml(s)}</span>
+          <div class="actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteSource('${s.replace(/'/g, "\\'")}')">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    document.getElementById('newSourceName').value = '';
+    document.getElementById('manageSourcesModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('newSourceName').focus(), 100);
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
+}
+
+function closeManageSourcesModal() {
+  document.getElementById('manageSourcesModal').style.display = 'none';
+}
+
+async function addSource(e) {
+  e.preventDefault();
+  const name = document.getElementById('newSourceName').value.trim();
+  if (!name) return;
+  try {
+    await dbAddSource(name);
+    openManageSources(); // refresh list
+    // Update source selector in form if it's open
+    const sources = await dbGetSources();
+    renderSourceSelector(sources);
+  } catch (err) {
+    alert(err.message || '创建失败');
+  }
+}
+
+async function deleteSource(name) {
+  if (!confirm(`确定删除来源「${name}」吗？（已标记为此来源的错题将清除来源标记）`)) return;
+  try {
+    await dbDeleteSource(name);
+    openManageSources(); // refresh list
+    // Update source selector
+    const sources = await dbGetSources();
+    renderSourceSelector(sources);
+    if (currentSourceFilter === name) currentSourceFilter = '';
+    renderAll();
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
 // --- Form Modal ---
 async function openAddModal() {
   if (!navigator.onLine) { alert('当前离线，无法添加错题'); return; }
@@ -845,7 +1030,6 @@ async function openAddModal() {
     }
 
     document.getElementById('formTitle').textContent = '添加错题';
-    document.getElementById('source').value = '';
     document.getElementById('errorReason').value = '';
     document.getElementById('answerText').value = '';
 
@@ -854,15 +1038,19 @@ async function openAddModal() {
     document.getElementById('questionUpload').classList.remove('has-image');
     currentQuestionData = null;
 
-    document.getElementById('answerPreview').style.display = 'none';
     document.getElementById('answerPlaceholder').style.display = '';
-    document.getElementById('answerUpload').classList.remove('has-image');
-    currentAnswerData = null;
+    currentAnswerImages = [];
+    renderAnswerPreviews();
 
     bindUploadZones();
 
     selectedSubject = subjects[0];
     renderSubjectSelector(subjects);
+
+    // Load sources and render selector
+    selectedSource = '';
+    const sources = await dbGetSources();
+    renderSourceSelector(sources);
 
     document.getElementById('formModal').style.display = 'flex';
   } catch (err) {
@@ -883,6 +1071,23 @@ async function selectSubject(name) {
   renderSubjectSelector(subjects);
 }
 
+function renderSourceSelector(sources) {
+  const el = document.getElementById('sourceSelector');
+  el.innerHTML = `<button type="button" class="subject-chip${!selectedSource ? ' selected' : ''}" onclick="selectSource('')">不限</button>`;
+  el.innerHTML += sources.map(s => `
+    <button type="button" class="subject-chip${selectedSource === s ? ' selected' : ''}" onclick="selectSource('${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>
+  `).join('');
+}
+
+function selectSource(name) {
+  selectedSource = name;
+  const el = document.getElementById('sourceSelector');
+  el.querySelectorAll('.subject-chip').forEach(c => c.classList.remove('selected'));
+  el.querySelectorAll('.subject-chip').forEach(c => {
+    if ((!name && c.textContent.trim() === '不限') || c.textContent.trim() === name) c.classList.add('selected');
+  });
+}
+
 function closeFormModal() {
   document.getElementById('formModal').style.display = 'none';
 }
@@ -896,10 +1101,11 @@ async function saveEntry(e) {
   try {
     const entry = {
       subject: selectedSubject,
-      source: document.getElementById('source').value.trim(),
+      source: selectedSource,
       errorReason: document.getElementById('errorReason').value.trim(),
       screenshot: currentQuestionData || '',
-      answerImage: currentAnswerData || '',
+      answerImage: currentAnswerImages.length > 0 ? currentAnswerImages[0] : '',
+      answerImages: currentAnswerImages,
       answerText: document.getElementById('answerText').value.trim(),
     };
     await dbAdd(entry);
@@ -928,12 +1134,18 @@ function openDetail(entry) {
       ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
       <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
     </div>
-    ${entry.answerText || entry.answerImage ? `
+    ${entry.answerText || (entry.answerImages && entry.answerImages.length > 0) || entry.answerImage ? `
     <div class="answer-box">
       <div class="detail-section"><h4>🔒 答案</h4></div>
       <div class="answer-blur-wrapper" id="answerWrapper">
         ${entry.answerText ? `<div class="answer-text" id="answerTextContent">${escapeHtml(entry.answerText)}</div>` : ''}
-        ${entry.answerImage ? `<img src="${entry.answerImage}" alt="答案截图" style="margin-top:${entry.answerText ? '8px' : '0'}">` : ''}
+        ${(entry.answerImages && entry.answerImages.length > 0)
+          ? entry.answerImages.map((img, i) =>
+              `<img src="${img}" alt="答案截图${i+1}" style="margin-top:${(entry.answerText || i > 0) ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
+            ).join('')
+          : entry.answerImage
+            ? `<img src="${entry.answerImage}" alt="答案截图" style="margin-top:${entry.answerText ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
+            : ''}
         <div class="answer-blur-overlay" id="answerOverlay" onclick="revealAnswer()">
           <button class="overlay-btn">👁️ 点击查看答案</button>
         </div>
@@ -1128,13 +1340,14 @@ function escapeHtml(str) {
 }
 
 // Close modals on overlay click
-['formModal','detailModal','subjectModal','manageModal'].forEach(id => {
+['formModal','detailModal','subjectModal','manageModal','manageSourcesModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) {
       if (id === 'formModal') closeFormModal();
       else if (id === 'detailModal') closeDetailModal();
       else if (id === 'subjectModal') closeSubjectModal();
-      else closeManageModal();
+      else if (id === 'manageModal') closeManageModal();
+      else closeManageSourcesModal();
     }
   });
 });
@@ -1145,6 +1358,7 @@ document.addEventListener('keydown', (e) => {
       { id: 'detailModal', close: closeDetailModal },
       { id: 'formModal', close: closeFormModal },
       { id: 'manageModal', close: closeManageModal },
+      { id: 'manageSourcesModal', close: closeManageSourcesModal },
       { id: 'subjectModal', close: closeSubjectModal },
     ];
     for (const m of modals) {
