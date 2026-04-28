@@ -709,6 +709,14 @@ async function dbDelete(id) {
   await supFetch(`/rest/v1/entries?id=eq.${id}`, { method: 'DELETE' });
 }
 
+async function dbUpdateEntry(id, updates) {
+  await supFetch(`/rest/v1/entries?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify(updates),
+  });
+}
+
 async function dbAddReview(entryId, correct) {
   await supFetch('/rest/v1/reviews', {
     method: 'POST',
@@ -853,21 +861,16 @@ function handleQuestionFile(e) {
 // --- Multi-image answer handling ---
 function handleAnswerFiles(e) {
   const files = e.target.files;
-  let loaded = 0;
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
     const reader = new FileReader();
-    reader.index = loaded;
     reader.onload = (ev) => {
       currentAnswerImages.push(ev.target.result);
-      loaded++;
-      if (loaded === files.length) renderAnswerPreviews();
+      renderAnswerPreviews();
     };
     reader.readAsDataURL(file);
-    loaded++;
   }
   e.target.value = '';
-  renderAnswerPreviews();
 }
 
 function removeAnswerImage(index) {
@@ -897,8 +900,11 @@ function renderAnswerPreviews() {
   ).join('');
 }
 
-// Bind drag events when modal opens
+// Bind drag events (once)
+let uploadZonesBound = false;
 function bindUploadZones() {
+  if (uploadZonesBound) return;
+  uploadZonesBound = true;
   setupUploadZone('questionUpload', 'questionFile', 'questionPreview', 'questionPlaceholder', 'question');
   // Answer zone: custom drag support for multi-image
   const az = document.getElementById('answerUpload');
@@ -1156,9 +1162,15 @@ function openDetail(entry) {
     </div>` : ''}
     <div class="detail-meta">
       <span class="detail-tag">📚 ${escapeHtml(entry.subject)}</span>
-      ${entry.source ? `<span class="detail-tag">📄 ${escapeHtml(entry.source)}</span>` : ''}
+      <span class="detail-tag">📄 <span id="detailSourceName">${escapeHtml(entry.source || '未设置')}</span>
+        <button class="btn btn-sm btn-ghost" onclick="toggleSourceEdit(${entry.id})" style="padding:0 4px;font-size:11px;vertical-align:middle;border:none;background:none;cursor:pointer;text-decoration:underline;color:var(--primary);">✏️</button>
+      </span>
       ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
       <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
+    </div>
+    <div id="detailSourceEditor" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">修改题目来源</div>
+      <div class="subjects-grid" id="detailSourceChips"></div>
     </div>
     ${entry.hint ? `
     <div class="detail-section">
@@ -1209,6 +1221,48 @@ function revealAnswer() {
 
 function revealHint() {
   document.getElementById('hintWrapper').classList.add('revealed');
+}
+
+// --- Source editing in detail view ---
+async function toggleSourceEdit(entryId) {
+  const editor = document.getElementById('detailSourceEditor');
+  if (editor.style.display !== 'none') {
+    editor.style.display = 'none';
+    return;
+  }
+  try {
+    const sources = await dbGetSources();
+    const entry = entryCache.get(entryId);
+    const currentSource = entry ? entry.source : '';
+    const chips = document.getElementById('detailSourceChips');
+    chips.innerHTML = `<button type="button" class="subject-chip${!currentSource ? ' selected' : ''}" onclick="setDetailSource(${entryId}, '')">不限</button>`;
+    chips.innerHTML += sources.map(s =>
+      `<button type="button" class="subject-chip${currentSource === s ? ' selected' : ''}" onclick="setDetailSource(${entryId}, '${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>`
+    ).join('');
+    editor.style.display = 'block';
+  } catch (err) {
+    alert('加载来源失败: ' + err.message);
+  }
+}
+
+async function setDetailSource(entryId, source) {
+  try {
+    await dbUpdateEntry(entryId, { source });
+    // Update cache
+    if (entryCache.has(entryId)) {
+      entryCache.get(entryId).source = source;
+    }
+    // Update display
+    document.getElementById('detailSourceName').textContent = source || '未设置';
+    // Update chip selection
+    document.querySelectorAll('#detailSourceChips .subject-chip').forEach(c => {
+      c.classList.toggle('selected', c.textContent.trim() === source || (!source && c.textContent.trim() === '不限'));
+    });
+    // Close editor
+    document.getElementById('detailSourceEditor').style.display = 'none';
+  } catch (err) {
+    alert('修改失败: ' + err.message);
+  }
 }
 
 function closeDetailModal() {
