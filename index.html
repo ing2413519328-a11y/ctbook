@@ -526,7 +526,9 @@ function initSupabase() {
 async function supFetch(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
-  const url = `${SUPABASE_URL}${path}`;
+  // Safari may strip custom headers on cross-origin requests, so pass apikey as URL param too
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${SUPABASE_URL}${path}${sep}apikey=${encodeURIComponent(SUPABASE_KEY)}`;
   try {
     const res = await fetch(url, {
       ...options,
@@ -655,6 +657,22 @@ function updateSyncStatus() {
 window.addEventListener('online', () => { updateSyncStatus(); renderAll(); });
 window.addEventListener('offline', updateSyncStatus);
 
+// --- Utilities ---
+async function clearSWCache() {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) await reg.unregister();
+    if (caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  }
+  location.reload();
+}
+
+// Detect iOS PWA standalone mode
+const IS_IOS_PWA = window.navigator.standalone === true;
+
 // --- App state ---
 let reviewStatsCache = {};
 let currentFilter = '';
@@ -676,13 +694,31 @@ function initApp() {
   updateSyncStatus();
   renderAll().catch(err => {
     console.error('Init error:', err);
-    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>加载失败: ${escapeHtml(err.message)}</p><button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button><button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重新配置</button></div>`;
+    const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
+    const isOffline = !navigator.onLine;
+    const msg = isOffline ? '当前处于离线状态，请检查网络连接后重试'
+      : isAuth ? 'API密钥无效或已过期，请重新配置'
+      : '加载失败: ' + escapeHtml(err.message);
+    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
+      ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
+      ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
+    </div>`;
   });
 }
 
 // Check config on load
 if (getConfig()) {
   initApp();
+} else if (IS_IOS_PWA) {
+  // iOS PWA has separate storage from Safari — user may have configured in browser
+  document.addEventListener('DOMContentLoaded', () => {
+    const subtitle = document.querySelector('.subtitle');
+    if (subtitle) {
+      subtitle.innerHTML += '<br><br><strong style="color:#ef4444;">⚠️ 检测到您正在使用主屏幕模式</strong>，如果已在 Safari 浏览器中配置过，请先在浏览器中打开一次同步数据，或在此处重新配置。';
+    }
+  });
 }
 
 // --- File handling ---
@@ -947,7 +983,16 @@ async function renderAll() {
     updateSyncStatus();
   } catch (err) {
     console.error('Render error:', err);
-    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>加载失败: ${escapeHtml(err.message)}</p><button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button><button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重置配置</button></div>`;
+    const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
+    const isOffline = !navigator.onLine;
+    const msg = isOffline ? '当前处于离线状态，请检查网络连接后重试'
+      : isAuth ? 'API密钥无效或已过期，请重新配置'
+      : '加载失败: ' + escapeHtml(err.message);
+    document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
+      ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+      ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
+    </div>`;
   }
 }
 

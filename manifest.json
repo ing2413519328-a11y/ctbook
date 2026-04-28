@@ -2,7 +2,7 @@
   "name": "错题本",
   "short_name": "错题本",
   "description": "个人错题管理工具",
-  "start_url": "index.html",
+  "start_url": "/ctbook/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f8fafc",
