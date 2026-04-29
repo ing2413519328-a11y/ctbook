@@ -689,6 +689,36 @@ async function dbAdd(entry) {
   return data[0].id;
 }
 
+async function dbGetList() {
+  const data = await supFetch('/rest/v1/entries?select=id,subject,source,error_reason,screenshot,created_at&order=created_at.desc');
+  return data.map(e => ({
+    id: e.id,
+    subject: e.subject,
+    source: e.source || '',
+    errorReason: e.error_reason || '',
+    screenshot: e.screenshot || '',
+    createdAt: new Date(e.created_at).getTime(),
+  }));
+}
+
+async function dbGetFullEntry(id) {
+  const data = await supFetch(`/rest/v1/entries?id=eq.${id}&select=*`);
+  if (data.length === 0) return null;
+  const e = data[0];
+  return {
+    id: e.id,
+    subject: e.subject,
+    source: e.source || '',
+    errorReason: e.error_reason || '',
+    screenshot: e.screenshot || '',
+    answerImage: e.answer_image || '',
+    answerImages: e.answer_images || [],
+    answerText: e.answer_text || '',
+    hint: e.hint || '',
+    createdAt: new Date(e.created_at).getTime(),
+  };
+}
+
 async function dbGetAll() {
   const data = await supFetch('/rest/v1/entries?select=*&order=created_at.desc');
   return data.map(e => ({
@@ -989,7 +1019,7 @@ function closeManageModal() {
 
 async function deleteSubjectConfirm(name) {
   try {
-    const entries = await dbGetAll();
+    const entries = await dbGetList();
     const count = entries.filter(e => e.subject === name).length;
     const msg = count > 0
       ? `确定删除科目「${name}」及其下的 ${count} 道错题吗？`
@@ -1298,9 +1328,17 @@ async function deleteEntry(id) {
 async function renderAll() {
   try {
     if (initLoadTimer) { clearTimeout(initLoadTimer); initLoadTimer = null; }
-    await renderSidebar();
-    await renderList();
-    updateAddButton();
+    const [subjects, entries, reviewStats] = await Promise.all([
+      dbGetSubjects(),
+      dbGetList(),
+      dbGetReviewStats()
+    ]);
+    reviewStatsCache = reviewStats;
+    entryCache.clear();
+    entries.forEach(e => entryCache.set(e.id, e));
+    renderSidebar(subjects, entries);
+    renderList(entries, reviewStats);
+    document.getElementById('addEntryBtn').disabled = subjects.length === 0;
     updateSyncStatus();
   } catch (err) {
     console.error('Render error:', err);
@@ -1317,8 +1355,7 @@ async function renderAll() {
   }
 }
 
-async function renderSidebar() {
-  const [subjects, entries] = await Promise.all([dbGetSubjects(), dbGetAll()]);
+function renderSidebar(subjects, entries) {
   const counts = {};
   entries.forEach(e => { counts[e.subject] = (counts[e.subject] || 0) + 1; });
   subjects.forEach(s => { if (!counts[s]) counts[s] = 0; });
@@ -1343,9 +1380,7 @@ function longPressEnd() {
   clearTimeout(longPressTimer);
 }
 
-async function renderList() {
-  const [entries, reviewStats] = await Promise.all([dbGetAll(), dbGetReviewStats()]);
-  reviewStatsCache = reviewStats;
+function renderList(entries, reviewStats) {
   let filtered = currentFilter ? entries.filter(e => e.subject === currentFilter) : entries;
   const content = document.getElementById('content');
   document.getElementById('listTitle').textContent = currentFilter ? `${currentFilter} · 错题` : '全部错题';
@@ -1377,9 +1412,7 @@ async function renderList() {
     return;
   }
 
-  entryCache.clear();
   content.innerHTML = `<div class="grid">${filtered.map(e => {
-    entryCache.set(e.id, e);
     return `
     <div class="card" onclick="openDetailById(${e.id})">
       ${e.screenshot ? `<img class="card-img" src="${e.screenshot}" alt="题目" loading="lazy">` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">无截图</div>'}
@@ -1394,8 +1427,14 @@ async function renderList() {
   `}).join('')}</div>`;
 }
 
-function openDetailById(id) {
-  openDetail(entryCache.get(id));
+async function openDetailById(id) {
+  try {
+    const entry = await dbGetFullEntry(id);
+    if (!entry) { alert('未找到该错题'); return; }
+    openDetail(entry);
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
 }
 
 function setFilter(subject) {
@@ -1409,12 +1448,7 @@ function setSourceFilter(source) {
   renderAll();
 }
 
-async function updateAddButton() {
-  try {
-    const subjects = await dbGetSubjects();
-    document.getElementById('addEntryBtn').disabled = subjects.length === 0;
-  } catch (e) { /* ignore */ }
-}
+
 
 function getReviewDisplay(stats) {
   if (!stats || stats.total === 0) return '<span class="dot gray"></span>未复习';
