@@ -787,7 +787,7 @@ function updateSyncStatus() {
     }
   }
 }
-window.addEventListener('online', () => { updateSyncStatus(); renderAll(); });
+window.addEventListener('online', () => { invalidateCache(); updateSyncStatus(); renderAll(); });
 window.addEventListener('offline', updateSyncStatus);
 
 // --- Utilities ---
@@ -808,6 +808,7 @@ const IS_IOS_PWA = window.navigator.standalone === true;
 
 // --- App state ---
 let reviewStatsCache = {};
+let entriesCache = null;
 let currentFilter = '';
 let currentSourceFilter = '';
 let currentQuestionData = null;
@@ -833,7 +834,7 @@ function initApp() {
     const content = document.getElementById('content');
     if (content && content.querySelector('.empty p')?.textContent === '加载中...') {
       content.innerHTML = `<div class="empty"><span class="icon">⏱️</span><p>加载超时，请检查网络和数据库配置</p>
-        <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+        <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重新配置</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
         ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
@@ -849,7 +850,7 @@ function initApp() {
       : '加载失败: ' + escapeHtml(err.message);
     document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
       ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
-      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+      <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
       <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
       ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
     </div>`;
@@ -984,6 +985,7 @@ async function addSubject(e) {
   try {
     await dbAddSubject(name);
     closeSubjectModal();
+    invalidateCache();
     renderAll();
   } catch (err) {
     alert(err.message || '创建失败');
@@ -1027,6 +1029,7 @@ async function deleteSubjectConfirm(name) {
     if (!confirm(msg)) return;
     await dbDeleteSubject(name);
     if (currentFilter === name) currentFilter = '';
+    invalidateCache();
     renderAll();
   } catch (err) {
     alert('删除失败: ' + err.message);
@@ -1086,6 +1089,7 @@ async function deleteSource(name) {
     const sources = await dbGetSources();
     renderSourceSelector(sources);
     if (currentSourceFilter === name) currentSourceFilter = '';
+    invalidateCache();
     renderAll();
   } catch (err) {
     alert('删除失败: ' + err.message);
@@ -1186,6 +1190,7 @@ async function saveEntry(e) {
     };
     await dbAdd(entry);
     closeFormModal();
+    invalidateCache();
     renderAll();
   } catch (err) {
     alert('保存失败: ' + err.message);
@@ -1318,26 +1323,35 @@ async function deleteEntry(id) {
   if (!confirm('确定要删除这道错题吗？')) return;
   try {
     await dbDelete(id);
+    invalidateCache();
     closeDetailModal();
   } catch (err) {
     alert('删除失败: ' + err.message);
   }
 }
 
+function invalidateCache() {
+  entriesCache = null;
+}
+
 // --- Render ---
 async function renderAll() {
   try {
     if (initLoadTimer) { clearTimeout(initLoadTimer); initLoadTimer = null; }
-    const [subjects, entries, reviewStats] = await Promise.all([
-      dbGetSubjects(),
-      dbGetList(),
-      dbGetReviewStats()
-    ]);
-    reviewStatsCache = reviewStats;
+    let subjects;
+    if (entriesCache === null) {
+      [subjects, entriesCache, reviewStatsCache] = await Promise.all([
+        dbGetSubjects(),
+        dbGetList(),
+        dbGetReviewStats()
+      ]);
+    } else {
+      subjects = await dbGetSubjects();
+    }
     entryCache.clear();
-    entries.forEach(e => entryCache.set(e.id, e));
-    renderSidebar(subjects, entries);
-    renderList(entries, reviewStats);
+    entriesCache.forEach(e => entryCache.set(e.id, e));
+    renderSidebar(subjects, entriesCache);
+    renderList(entriesCache, reviewStatsCache);
     document.getElementById('addEntryBtn').disabled = subjects.length === 0;
     updateSyncStatus();
   } catch (err) {
@@ -1349,7 +1363,7 @@ async function renderAll() {
       : '加载失败: ' + escapeHtml(err.message);
     document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
       ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
-      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+      <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
       ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
     </div>`;
   }
