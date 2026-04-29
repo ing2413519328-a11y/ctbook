@@ -786,20 +786,6 @@ let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
 
-// Catch unexpected errors globally to prevent blank/loading screens
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('Unhandled rejection:', e.reason);
-  const content = document.getElementById('content');
-  if (content && content.querySelector('.empty p')?.textContent === '加载中...') {
-    if (initLoadTimer) { clearTimeout(initLoadTimer); initLoadTimer = null; }
-    content.innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>连接失败: ${escapeHtml(e.reason?.message || '未知错误')}</p>
-      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
-      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
-      ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
-    </div>`;
-  }
-});
-
 // --- Init ---
 let initLoadTimer = null;
 
@@ -1494,7 +1480,7 @@ document.addEventListener('keydown', (e) => {
 
 // PWA
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 </script>
 </body>
