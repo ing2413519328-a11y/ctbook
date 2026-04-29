@@ -786,7 +786,23 @@ let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
 
+// Catch unexpected errors globally to prevent blank/loading screens
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled rejection:', e.reason);
+  const content = document.getElementById('content');
+  if (content && content.querySelector('.empty p')?.textContent === '加载中...') {
+    if (initLoadTimer) { clearTimeout(initLoadTimer); initLoadTimer = null; }
+    content.innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>连接失败: ${escapeHtml(e.reason?.message || '未知错误')}</p>
+      <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
+      ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
+    </div>`;
+  }
+});
+
 // --- Init ---
+let initLoadTimer = null;
+
 function initApp() {
   if (!initSupabase()) {
     document.getElementById('setupScreen').style.display = '';
@@ -796,6 +812,18 @@ function initApp() {
   document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = 'flex';
   updateSyncStatus();
+  // Safety timeout: show retry UI if loading takes >15s
+  initLoadTimer = setTimeout(() => {
+    const content = document.getElementById('content');
+    if (content && content.querySelector('.empty p')?.textContent === '加载中...') {
+      content.innerHTML = `<div class="empty"><span class="icon">⏱️</span><p>加载超时，请检查网络和数据库配置</p>
+        <button class="btn btn-ghost btn-sm" onclick="renderAll()">重试</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重新配置</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
+        ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
+      </div>`;
+    }
+  }, 15000);
   renderAll().catch(err => {
     console.error('Init error:', err);
     const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
@@ -1283,6 +1311,7 @@ async function deleteEntry(id) {
 // --- Render ---
 async function renderAll() {
   try {
+    if (initLoadTimer) { clearTimeout(initLoadTimer); initLoadTimer = null; }
     await renderSidebar();
     await renderList();
     updateAddButton();
