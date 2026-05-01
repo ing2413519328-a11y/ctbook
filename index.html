@@ -115,6 +115,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .card-review .dot.red { background: #ef4444; }
 .card-review .dot.gray { background: #94a3b8; }
 
+/* Title display mode */
+.card.title-mode { display: flex; flex-direction: column; }
+.card.title-mode .card-body { flex: 1; display: flex; flex-direction: column; }
+.card.title-mode .card-title-text { font-size: 16px; font-weight: 600; margin: 4px 0 8px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card.title-mode .card-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+
+/* Hint images */
+.hint-img-upload { margin-top: 8px; }
+.hint-img-upload .upload-zone { min-height: 50px; padding: 12px; }
+.hint-img-upload .upload-zone img { max-height: 60px; }
+.hint-img-upload .previews { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+
+/* Hint images in detail view */
+.hint-media { margin-top: 8px; }
+.hint-media img { width: 100%; border-radius: var(--radius); }
+.hint-blur-wrapper .hint-media img { filter: blur(20px); user-select: none; pointer-events: none; transition: filter .3s; }
+.hint-blur-wrapper.revealed .hint-media img { filter: blur(0); pointer-events: auto; }
+
 .detail-review-stats { margin-bottom: 16px; padding: 12px 16px; background: #f8fafc; border-radius: 8px; }
 .detail-review-stats h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
 .detail-review-stats .stat { font-size: 15px; font-weight: 500; margin-bottom: 10px; }
@@ -313,6 +331,7 @@ CREATE TABLE entries (
   answer_images JSONB DEFAULT '[]'::jsonb,
   answer_text TEXT DEFAULT '',
   hint TEXT DEFAULT '',
+  hint_images JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -337,6 +356,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_text TEXT DEFAULT '';
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_images JSONB DEFAULT '[]'::jsonb;
 -- ALTER TABLE entries ADD COLUMN IF NOT EXISTS hint TEXT DEFAULT '';
+-- ALTER TABLE entries ADD COLUMN IF NOT EXISTS hint_images JSONB DEFAULT '[]'::jsonb;
 --
 -- CREATE TABLE sources (
 --   id SERIAL PRIMARY KEY,
@@ -386,7 +406,10 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
   <main class="main">
     <div class="toolbar">
       <h2 id="listTitle">全部错题</h2>
-      <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" id="displayToggle" onclick="toggleDisplayMode()">📋 列表模式</button>
+        <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
+      </div>
     </div>
     <div class="source-bar" id="sourceBar"></div>
     <div class="content" id="content">
@@ -428,6 +451,14 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
         <div class="form-group">
           <label>提示 <span style="font-weight:400;color:var(--text-muted);">（复习时可选择查看）</span></label>
           <textarea id="hint" rows="2" placeholder="如：注意单位换算、考虑边界条件…"></textarea>
+          <div class="hint-img-upload">
+            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">提示图片（可选）</label>
+            <div class="upload-zone" id="hintUpload" onclick="document.getElementById('hintFile').click()">
+              <div class="placeholder" id="hintPlaceholder"><span class="big">📷</span>点击上传提示图片</div>
+              <div id="hintPreviewContainer"></div>
+            </div>
+            <input type="file" id="hintFile" accept="image/*" multiple style="display:none" onchange="handleHintFiles(event)">
+          </div>
         </div>
         <div class="form-group">
           <label>答案截图 <span style="font-weight:400;color:var(--text-muted);">（可上传多张）</span></label>
@@ -683,6 +714,7 @@ async function dbAdd(entry) {
       answer_images: entry.answerImages || [],
       answer_text: entry.answerText,
       hint: entry.hint || '',
+      hint_images: entry.hintImages || [],
       created_at: new Date().toISOString(),
     }),
   });
@@ -715,6 +747,7 @@ async function dbGetFullEntry(id) {
     answerImages: e.answer_images || [],
     answerText: e.answer_text || '',
     hint: e.hint || '',
+    hintImages: e.hint_images || [],
     createdAt: new Date(e.created_at).getTime(),
   };
 }
@@ -731,6 +764,7 @@ async function dbGetAll() {
     answerImages: e.answer_images || [],
     answerText: e.answer_text || '',
     hint: e.hint || '',
+    hintImages: e.hint_images || [],
     createdAt: new Date(e.created_at).getTime(),
   }));
 }
@@ -813,9 +847,11 @@ let currentFilter = '';
 let currentSourceFilter = '';
 let currentQuestionData = null;
 let currentAnswerImages = [];
+let currentHintImages = [];
 let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
+let displayMode = localStorage.getItem('cuotiben_display_mode') || 'image';
 
 // --- Init ---
 let initLoadTimer = null;
@@ -945,12 +981,65 @@ function renderAnswerPreviews() {
   ).join('');
 }
 
+// --- Hint image handling ---
+function handleHintFiles(e) {
+  const files = e.target.files;
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      currentHintImages.push(ev.target.result);
+      renderHintPreviews();
+    };
+    reader.readAsDataURL(file);
+  }
+  e.target.value = '';
+}
+
+function removeHintImage(index) {
+  currentHintImages.splice(index, 1);
+  renderHintPreviews();
+}
+
+function renderHintPreviews() {
+  const container = document.getElementById('hintPreviewContainer');
+  const placeholder = document.getElementById('hintPlaceholder');
+  if (currentHintImages.length === 0) {
+    placeholder.style.display = '';
+    container.innerHTML = '';
+    return;
+  }
+  placeholder.style.display = 'none';
+  container.innerHTML = currentHintImages.map((img, i) =>
+    `<div style="position:relative;display:inline-block;margin:4px;">
+      <img src="${img}" style="height:60px;width:60px;border-radius:6px;object-fit:cover;border:1px solid var(--border);">
+      <button type="button" onclick="removeHintImage(${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>
+    </div>`
+  ).join('');
+}
+
 // Bind drag events (once)
 let uploadZonesBound = false;
 function bindUploadZones() {
   if (uploadZonesBound) return;
   uploadZonesBound = true;
   setupUploadZone('questionUpload', 'questionFile', 'questionPreview', 'questionPlaceholder', 'question');
+  // Hint zone: drag support
+  const hz = document.getElementById('hintUpload');
+  if (hz) {
+    hz.addEventListener('dragover', (e) => { e.preventDefault(); hz.classList.add('dragover'); });
+    hz.addEventListener('dragleave', () => { hz.classList.remove('dragover'); });
+    hz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      hz.classList.remove('dragover');
+      for (const file of e.dataTransfer.files) {
+        if (!file.type.startsWith('image/')) continue;
+        const reader = new FileReader();
+        reader.onload = (ev) => { currentHintImages.push(ev.target.result); renderHintPreviews(); };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
   // Answer zone: custom drag support for multi-image
   const az = document.getElementById('answerUpload');
   az.addEventListener('dragover', (e) => { e.preventDefault(); az.classList.add('dragover'); });
@@ -1121,6 +1210,10 @@ async function openAddModal() {
     currentAnswerImages = [];
     renderAnswerPreviews();
 
+    // Reset hint images
+    currentHintImages = [];
+    renderHintPreviews();
+
     bindUploadZones();
 
     selectedSubject = subjects[0];
@@ -1183,6 +1276,7 @@ async function saveEntry(e) {
       source: selectedSource,
       errorReason: document.getElementById('errorReason').value.trim(),
       hint: document.getElementById('hint').value.trim(),
+      hintImages: currentHintImages,
       screenshot: currentQuestionData || '',
       answerImage: currentAnswerImages.length > 0 ? currentAnswerImages[0] : '',
       answerImages: currentAnswerImages,
@@ -1221,11 +1315,12 @@ function openDetail(entry) {
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">修改题目来源</div>
       <div class="subjects-grid" id="detailSourceChips"></div>
     </div>
-    ${entry.hint ? `
+    ${entry.hint || (entry.hintImages && entry.hintImages.length > 0) ? `
     <div class="detail-section">
       <h4>💡 提示</h4>
       <div class="hint-blur-wrapper" id="hintWrapper">
-        <div class="hint-text">${escapeHtml(entry.hint)}</div>
+        ${entry.hint ? `<div class="hint-text">${escapeHtml(entry.hint)}</div>` : ''}
+        ${entry.hintImages && entry.hintImages.length > 0 ? `<div class="hint-media">${entry.hintImages.map(img => `<img src="${img}" alt="提示图片">`).join('')}</div>` : ''}
         <div class="hint-blur-overlay" onclick="revealHint()">
           <button class="overlay-btn">👁️ 查看提示</button>
         </div>
@@ -1350,6 +1445,9 @@ async function renderAll() {
     }
     entryCache.clear();
     entriesCache.forEach(e => entryCache.set(e.id, e));
+    // Sync toggle button text with display mode
+    const toggleBtn = document.getElementById('displayToggle');
+    if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
     renderSidebar(subjects, entriesCache);
     renderList(entriesCache, reviewStatsCache);
     document.getElementById('addEntryBtn').disabled = subjects.length === 0;
@@ -1427,6 +1525,20 @@ function renderList(entries, reviewStats) {
   }
 
   content.innerHTML = `<div class="grid">${filtered.map(e => {
+    if (displayMode === 'title') {
+      return `
+      <div class="card title-mode" onclick="openDetailById(${e.id})">
+        <div class="card-body">
+          <span class="card-subject">${escapeHtml(e.subject)}</span>
+          <div class="card-title-text">${escapeHtml(e.errorReason || '无描述')}</div>
+          <div class="card-meta">
+            ${e.source ? `<span class="card-source">📄 ${escapeHtml(e.source)}</span>` : ''}
+            <span class="card-date">${new Date(e.createdAt).toLocaleString('zh-CN')}</span>
+          </div>
+          <div class="card-review">${getReviewDisplay(reviewStats[e.id])}</div>
+        </div>
+      </div>`;
+    }
     return `
     <div class="card" onclick="openDetailById(${e.id})">
       ${e.screenshot ? `<img class="card-img" src="${e.screenshot}" alt="题目" loading="lazy">` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">无截图</div>'}
@@ -1459,6 +1571,13 @@ function setFilter(subject) {
 
 function setSourceFilter(source) {
   currentSourceFilter = source;
+  renderAll();
+}
+
+function toggleDisplayMode() {
+  displayMode = displayMode === 'image' ? 'title' : 'image';
+  localStorage.setItem('cuotiben_display_mode', displayMode);
+  document.getElementById('displayToggle').textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
   renderAll();
 }
 
