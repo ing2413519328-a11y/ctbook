@@ -407,6 +407,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
     <div class="toolbar">
       <h2 id="listTitle">全部错题</h2>
       <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" id="sortToggle" onclick="toggleSortMode()">⏰ 按时间</button>
         <button class="btn btn-ghost btn-sm" id="displayToggle" onclick="toggleDisplayMode()">📋 列表模式</button>
         <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
       </div>
@@ -852,6 +853,7 @@ let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
 let displayMode = localStorage.getItem('cuotiben_display_mode') || 'image';
+let sortMode = localStorage.getItem('cuotiben_sort_mode') || 'time';
 
 // --- Init ---
 let initLoadTimer = null;
@@ -1448,6 +1450,9 @@ async function renderAll() {
     // Sync toggle button text with display mode
     const toggleBtn = document.getElementById('displayToggle');
     if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
+    // Sync sort toggle text
+    const sortBtn = document.getElementById('sortToggle');
+    if (sortBtn) sortBtn.textContent = sortMode === 'time' ? '⏰ 按时间' : '🎲 随机';
     renderSidebar(subjects, entriesCache);
     renderList(entriesCache, reviewStatsCache);
     document.getElementById('addEntryBtn').disabled = subjects.length === 0;
@@ -1511,13 +1516,24 @@ function renderList(entries, reviewStats) {
     filtered = filtered.filter(e => e.source === currentSourceFilter);
   }
 
-  // Sort by review accuracy (unreviewed first, then low to high)
-  filtered.sort((a, b) => {
-    const sa = reviewStats[a.id];
-    const sb = reviewStats[b.id];
-    const getScore = (s) => s && s.total > 0 ? s.correct / s.total : -1;
-    return getScore(sa) - getScore(sb);
-  });
+  // Sort by selected mode
+  if (sortMode === 'time') {
+    filtered.sort((a, b) => b.createdAt - a.createdAt); // newest first
+  } else if (sortMode === 'random') {
+    // Fisher-Yates shuffle
+    for (let i = filtered.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+    }
+  } else {
+    // Default: sort by review accuracy (unreviewed first, then low to high)
+    filtered.sort((a, b) => {
+      const sa = reviewStats[a.id];
+      const sb = reviewStats[b.id];
+      const getScore = (s) => s && s.total > 0 ? s.correct / s.total : -1;
+      return getScore(sa) - getScore(sb);
+    });
+  }
 
   if (filtered.length === 0) {
     content.innerHTML = `<div class="empty"><span class="icon">📝</span><p>${currentFilter ? '该科目下还没有错题' : '还没有错题，先创建科目再添加'}</p>${currentFilter ? `<button class="btn btn-primary btn-sm" onclick="openAddModal()">添加错题</button>` : `<button class="btn btn-primary btn-sm" onclick="openAddSubject()">创建科目</button>`}</div>`;
@@ -1578,6 +1594,17 @@ function toggleDisplayMode() {
   displayMode = displayMode === 'image' ? 'title' : 'image';
   localStorage.setItem('cuotiben_display_mode', displayMode);
   document.getElementById('displayToggle').textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
+  renderAll();
+}
+
+function toggleSortMode() {
+  if (sortMode === 'time') {
+    sortMode = 'random';
+  } else {
+    sortMode = 'time';
+  }
+  localStorage.setItem('cuotiben_sort_mode', sortMode);
+  document.getElementById('sortToggle').textContent = sortMode === 'time' ? '⏰ 按时间' : '🎲 随机';
   renderAll();
 }
 
