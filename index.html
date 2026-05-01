@@ -723,13 +723,13 @@ async function dbAdd(entry) {
 }
 
 async function dbGetList() {
-  const data = await supFetch('/rest/v1/entries?select=id,subject,source,error_reason,screenshot,created_at&order=created_at.desc');
+  const data = await supFetch('/rest/v1/entries?select=id,subject,source,error_reason,created_at&order=created_at.desc');
   return data.map(e => ({
     id: e.id,
     subject: e.subject,
     source: e.source || '',
     errorReason: e.error_reason || '',
-    screenshot: e.screenshot || '',
+    screenshot: '',
     createdAt: new Date(e.created_at).getTime(),
   }));
 }
@@ -923,15 +923,31 @@ function setupUploadZone(zoneId, fileInputId, previewId, placeholderId, stateKey
   });
 }
 
+function compressImageDataUrl(dataUrl, maxW, quality, callback) {
+  const img = new Image();
+  img.onload = () => {
+    let w = img.width, h = img.height;
+    if (w > maxW) { h = h * maxW / w; w = maxW; }
+    if (h > maxW) { w = w * maxW / h; h = maxW; }
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(c.toDataURL('image/jpeg', quality));
+  };
+  img.src = dataUrl;
+}
+
 function readImage(file, stateKey) {
   const reader = new FileReader();
   reader.onload = (e) => {
-    const data = e.target.result;
-    if (stateKey === 'question') currentQuestionData = data;
-    document.getElementById('questionPreview').src = data;
-    document.getElementById('questionPreview').style.display = 'block';
-    document.getElementById('questionPlaceholder').style.display = 'none';
-    document.getElementById('questionUpload').classList.add('has-image');
+    compressImageDataUrl(e.target.result, 1200, 0.7, (data) => {
+      if (stateKey === 'question') currentQuestionData = data;
+      document.getElementById('questionPreview').src = data;
+      document.getElementById('questionPreview').style.display = 'block';
+      document.getElementById('questionPlaceholder').style.display = 'none';
+      document.getElementById('questionUpload').classList.add('has-image');
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -948,8 +964,10 @@ function handleAnswerFiles(e) {
     if (!file.type.startsWith('image/')) continue;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      currentAnswerImages.push(ev.target.result);
-      renderAnswerPreviews();
+      compressImageDataUrl(ev.target.result, 1200, 0.7, (data) => {
+        currentAnswerImages.push(data);
+        renderAnswerPreviews();
+      });
     };
     reader.readAsDataURL(file);
   }
@@ -990,8 +1008,10 @@ function handleHintFiles(e) {
     if (!file.type.startsWith('image/')) continue;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      currentHintImages.push(ev.target.result);
-      renderHintPreviews();
+      compressImageDataUrl(ev.target.result, 1200, 0.7, (data) => {
+        currentHintImages.push(data);
+        renderHintPreviews();
+      });
     };
     reader.readAsDataURL(file);
   }
@@ -1037,7 +1057,7 @@ function bindUploadZones() {
       for (const file of e.dataTransfer.files) {
         if (!file.type.startsWith('image/')) continue;
         const reader = new FileReader();
-        reader.onload = (ev) => { currentHintImages.push(ev.target.result); renderHintPreviews(); };
+        reader.onload = (ev) => { compressImageDataUrl(ev.target.result, 1200, 0.7, (data) => { currentHintImages.push(data); renderHintPreviews(); }); };
         reader.readAsDataURL(file);
       }
     });
@@ -1052,7 +1072,7 @@ function bindUploadZones() {
     for (const file of e.dataTransfer.files) {
       if (!file.type.startsWith('image/')) continue;
       const reader = new FileReader();
-      reader.onload = (ev) => { currentAnswerImages.push(ev.target.result); renderAnswerPreviews(); };
+      reader.onload = (ev) => { compressImageDataUrl(ev.target.result, 1200, 0.7, (data) => { currentAnswerImages.push(data); renderAnswerPreviews(); }); };
       reader.readAsDataURL(file);
     }
   });
@@ -1461,8 +1481,10 @@ async function renderAll() {
     console.error('Render error:', err);
     const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
     const isOffline = !navigator.onLine;
+    const isJsonError = err.message && (err.message.includes('JSON') || err.message.includes('Unexpected token') || err.message.includes('Unterminated'));
     const msg = isOffline ? '当前处于离线状态，请检查网络连接后重试'
       : isAuth ? 'API密钥无效或已过期，请重新配置'
+      : isJsonError ? '数据加载失败，可能是数据库中的图片过大。已优化图片上传，请<strong>清除缓存并刷新</strong>后重试'
       : '加载失败: ' + escapeHtml(err.message);
     document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
       ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
@@ -1557,7 +1579,7 @@ function renderList(entries, reviewStats) {
     }
     return `
     <div class="card" onclick="openDetailById(${e.id})">
-      ${e.screenshot ? `<img class="card-img" src="${e.screenshot}" alt="题目" loading="lazy">` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">无截图</div>'}
+      ${e.screenshot ? `<img class="card-img" src="${e.screenshot}" alt="题目" loading="lazy">` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-direction:column;gap:4px;"><span style="font-size:28px;">📝</span><span style="font-size:12px;">点击查看</span></div>'}
       <div class="card-body">
         <span class="card-subject">${escapeHtml(e.subject)}</span>
         ${e.source ? `<div class="card-source">📄 ${escapeHtml(e.source)}</div>` : ''}
