@@ -408,7 +408,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
       <h2 id="listTitle">全部错题</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn btn-ghost btn-sm" id="sortToggle" onclick="toggleSortMode()">⏰ 从新到旧</button>
-        <button class="btn btn-ghost btn-sm" id="displayToggle" onclick="toggleDisplayMode()">📋 列表模式</button>
+        <button class="btn btn-ghost btn-sm" id="displayToggle" onclick="toggleDisplayMode()">🖼️ 图片模式</button>
         <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
       </div>
     </div>
@@ -852,7 +852,7 @@ let currentHintImages = [];
 let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
-let displayMode = localStorage.getItem('cuotiben_display_mode') || 'image';
+let displayMode = localStorage.getItem('cuotiben_display_mode') || 'title';
 let sortMode = localStorage.getItem('cuotiben_sort_mode') || 'time-desc';
 // Migrate old 'time' value to 'time-desc'
 if (sortMode === 'time') { sortMode = 'time-desc'; localStorage.setItem('cuotiben_sort_mode', 'time-desc'); }
@@ -1451,6 +1451,7 @@ async function deleteEntry(id) {
 
 function invalidateCache() {
   entriesCache = null;
+  screenshotPrefetchDone = false;
 }
 
 // --- Render ---
@@ -1479,6 +1480,8 @@ async function renderAll() {
     renderList(entriesCache, reviewStatsCache);
     document.getElementById('addEntryBtn').disabled = subjects.length === 0;
     updateSyncStatus();
+    // Background load screenshots for image mode
+    prefetchScreenshots();
   } catch (err) {
     console.error('Render error:', err);
     const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
@@ -1494,6 +1497,39 @@ async function renderAll() {
       ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
     </div>`;
   }
+}
+
+// Background prefetch screenshots for image mode — fetches in small batches to keep responses manageable
+let screenshotPrefetchDone = false;
+async function prefetchScreenshots() {
+  if (!entriesCache || screenshotPrefetchDone) return;
+  const ids = entriesCache.map(e => e.id);
+  const uncached = ids.filter(id => !entryCache.get(id)?.screenshot);
+  if (uncached.length === 0) { screenshotPrefetchDone = true; return; }
+  const chunkSize = 15;
+  for (let i = 0; i < uncached.length; i += chunkSize) {
+    const chunk = uncached.slice(i, i + chunkSize);
+    try {
+      const data = await supFetch(`/rest/v1/entries?select=id,screenshot&id=in.(${chunk.join(',')})`);
+      data.forEach(e => {
+        const cached = entryCache.get(e.id);
+        if (cached && e.screenshot) {
+          cached.screenshot = e.screenshot;
+          entryCache.set(e.id, cached);
+          // Also update entriesCache reference
+          const listEntry = entriesCache.find(le => le.id === e.id);
+          if (listEntry) listEntry.screenshot = e.screenshot;
+        }
+      });
+      // Re-render if in image mode and we have new data
+      if (displayMode === 'image' && data.some(d => d.screenshot)) {
+        renderList(entriesCache, reviewStatsCache);
+      }
+    } catch (err) {
+      console.warn('Screenshot prefetch batch failed:', err.message);
+    }
+  }
+  screenshotPrefetchDone = true;
 }
 
 function renderSidebar(subjects, entries) {
