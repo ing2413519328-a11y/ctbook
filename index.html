@@ -407,7 +407,7 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
     <div class="toolbar">
       <h2 id="listTitle">全部错题</h2>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-ghost btn-sm" id="sortToggle" onclick="toggleSortMode()">⏰ 按时间</button>
+        <button class="btn btn-ghost btn-sm" id="sortToggle" onclick="toggleSortMode()">⏰ 从新到旧</button>
         <button class="btn btn-ghost btn-sm" id="displayToggle" onclick="toggleDisplayMode()">📋 列表模式</button>
         <button class="btn btn-primary" id="addEntryBtn" onclick="openAddModal()">+ 添加错题</button>
       </div>
@@ -853,7 +853,9 @@ let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
 let displayMode = localStorage.getItem('cuotiben_display_mode') || 'image';
-let sortMode = localStorage.getItem('cuotiben_sort_mode') || 'time';
+let sortMode = localStorage.getItem('cuotiben_sort_mode') || 'time-desc';
+// Migrate old 'time' value to 'time-desc'
+if (sortMode === 'time') { sortMode = 'time-desc'; localStorage.setItem('cuotiben_sort_mode', 'time-desc'); }
 
 // --- Init ---
 let initLoadTimer = null;
@@ -1472,7 +1474,7 @@ async function renderAll() {
     if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
     // Sync sort toggle text
     const sortBtn = document.getElementById('sortToggle');
-    if (sortBtn) sortBtn.textContent = sortMode === 'time' ? '⏰ 按时间' : '🎲 随机';
+    if (sortBtn) sortBtn.textContent = sortMode === 'time-desc' ? '⏰ 从新到旧' : sortMode === 'time-asc' ? '⏰ 从旧到新' : '🎲 随机';
     renderSidebar(subjects, entriesCache);
     renderList(entriesCache, reviewStatsCache);
     document.getElementById('addEntryBtn').disabled = subjects.length === 0;
@@ -1539,8 +1541,10 @@ function renderList(entries, reviewStats) {
   }
 
   // Sort by selected mode
-  if (sortMode === 'time') {
+  if (sortMode === 'time-desc') {
     filtered.sort((a, b) => b.createdAt - a.createdAt); // newest first
+  } else if (sortMode === 'time-asc') {
+    filtered.sort((a, b) => a.createdAt - b.createdAt); // oldest first
   } else if (sortMode === 'random') {
     // Fisher-Yates shuffle
     for (let i = filtered.length - 1; i > 0; i--) {
@@ -1620,13 +1624,15 @@ function toggleDisplayMode() {
 }
 
 function toggleSortMode() {
-  if (sortMode === 'time') {
+  if (sortMode === 'time-desc') {
+    sortMode = 'time-asc';
+  } else if (sortMode === 'time-asc') {
     sortMode = 'random';
   } else {
-    sortMode = 'time';
+    sortMode = 'time-desc';
   }
   localStorage.setItem('cuotiben_sort_mode', sortMode);
-  document.getElementById('sortToggle').textContent = sortMode === 'time' ? '⏰ 按时间' : '🎲 随机';
+  document.getElementById('sortToggle').textContent = sortMode === 'time-desc' ? '⏰ 从新到旧' : sortMode === 'time-asc' ? '⏰ 从旧到新' : '🎲 随机';
   renderAll();
 }
 
