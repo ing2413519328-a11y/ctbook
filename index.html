@@ -1562,13 +1562,18 @@ function renderList(entries, reviewStats) {
   const content = document.getElementById('content');
   document.getElementById('listTitle').textContent = currentFilter ? `${currentFilter} · 错题` : '全部错题';
 
-  // Source filter bar
-  const sources = [...new Set(filtered.filter(e => e.source).map(e => e.source))].sort();
+  // Source filter bar — only show sources for the selected subject
   const bar = document.getElementById('sourceBar');
-  if (sources.length > 0) {
-    bar.innerHTML = `<span class="label">来源:</span><button class="source-chip${!currentSourceFilter ? ' active' : ''}" onclick="setSourceFilter('')">全部</button>${sources.map(s => `<button class="source-chip${currentSourceFilter === s ? ' active' : ''}" onclick="setSourceFilter('${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>`).join('')}`;
+  if (currentFilter) {
+    const sources = [...new Set(filtered.filter(e => e.source).map(e => e.source))].sort();
+    if (sources.length > 0) {
+      bar.innerHTML = `<span class="label">来源:</span><button class="source-chip${!currentSourceFilter ? ' active' : ''}" onclick="setSourceFilter('')">全部</button>${sources.map(s => `<button class="source-chip${currentSourceFilter === s ? ' active' : ''}" onclick="setSourceFilter('${s.replace(/'/g, "\\'")}')">${escapeHtml(s)}</button>`).join('')}`;
+    } else {
+      bar.innerHTML = '';
+    }
   } else {
     bar.innerHTML = '';
+    currentSourceFilter = ''; // reset source filter when viewing all subjects
   }
 
   // Apply source filter
