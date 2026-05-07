@@ -852,6 +852,7 @@ let currentHintImages = [];
 let selectedSource = '';
 let selectedSubject = null;
 let entryCache = new Map();
+let editingEntryId = null;
 let displayMode = localStorage.getItem('cuotiben_display_mode') || 'title';
 let sortMode = localStorage.getItem('cuotiben_sort_mode') || 'time-desc';
 // Migrate old 'time' value to 'time-desc'
@@ -1254,6 +1255,72 @@ async function openAddModal() {
   }
 }
 
+async function openEditModal(entry) {
+  if (!navigator.onLine) { alert('当前离线，无法编辑'); return; }
+  try {
+    const subjects = await dbGetSubjects();
+    if (subjects.length === 0) {
+      alert('请先创建科目');
+      return;
+    }
+
+    editingEntryId = entry.id;
+    document.getElementById('formTitle').textContent = '编辑错题';
+
+    // Pre-fill text fields
+    document.getElementById('errorReason').value = entry.errorReason || '';
+    document.getElementById('hint').value = entry.hint || '';
+    document.getElementById('answerText').value = entry.answerText || '';
+
+    // Pre-fill question screenshot
+    currentQuestionData = entry.screenshot || null;
+    if (currentQuestionData) {
+      document.getElementById('questionPreview').src = currentQuestionData;
+      document.getElementById('questionPreview').style.display = 'block';
+      document.getElementById('questionPlaceholder').style.display = 'none';
+      document.getElementById('questionUpload').classList.add('has-image');
+    } else {
+      document.getElementById('questionPreview').style.display = 'none';
+      document.getElementById('questionPlaceholder').style.display = '';
+      document.getElementById('questionUpload').classList.remove('has-image');
+    }
+
+    // Pre-fill answer images
+    currentAnswerImages = entry.answerImages || [];
+    if (!currentAnswerImages.length && entry.answerImage) {
+      currentAnswerImages = [entry.answerImage];
+    }
+    renderAnswerPreviews();
+
+    // Pre-fill hint images
+    currentHintImages = entry.hintImages || [];
+    renderHintPreviews();
+
+    bindUploadZones();
+
+    selectedSubject = entry.subject;
+    renderSubjectSelector(subjects);
+
+    selectedSource = entry.source || '';
+    const sources = await dbGetSources();
+    renderSourceSelector(sources);
+
+    document.getElementById('formModal').style.display = 'flex';
+  } catch (err) {
+    alert('加载编辑表单失败: ' + err.message);
+  }
+}
+
+async function openEditModalById(id) {
+  try {
+    const entry = await dbGetFullEntry(id);
+    if (!entry) { alert('未找到该错题'); return; }
+    await openEditModal(entry);
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
+}
+
 function renderSubjectSelector(subjects) {
   const el = document.getElementById('subjectSelector');
   el.innerHTML = subjects.map(s => `
@@ -1286,6 +1353,7 @@ function selectSource(name) {
 
 function closeFormModal() {
   document.getElementById('formModal').style.display = 'none';
+  editingEntryId = null;
 }
 
 async function saveEntry(e) {
@@ -1306,7 +1374,21 @@ async function saveEntry(e) {
       answerImages: currentAnswerImages,
       answerText: document.getElementById('answerText').value.trim(),
     };
-    await dbAdd(entry);
+    if (editingEntryId) {
+      await dbUpdateEntry(editingEntryId, {
+        subject: entry.subject,
+        source: entry.source,
+        error_reason: entry.errorReason,
+        screenshot: entry.screenshot,
+        answer_image: entry.answerImage,
+        answer_images: entry.answerImages,
+        answer_text: entry.answerText,
+        hint: entry.hint,
+        hint_images: entry.hintImages,
+      });
+    } else {
+      await dbAdd(entry);
+    }
     closeFormModal();
     invalidateCache();
     renderAll();
@@ -1376,6 +1458,7 @@ function openDetail(entry) {
       </div>
     </div>
     <div class="form-actions" style="margin-top:16px;">
+      <button class="btn btn-primary" onclick="closeDetailModal();openEditModalById(${entry.id})">✏️ 编辑</button>
       <button class="btn btn-danger" onclick="deleteEntry(${entry.id})">🗑️ 删除</button>
       <button class="btn btn-ghost" onclick="closeDetailModal()">关闭</button>
     </div>
