@@ -231,6 +231,36 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   border-radius: 8px; font-size: 14px; cursor: pointer; box-shadow: var(--shadow-md);
 }
 
+/* Detail split layout: question left, answer right */
+.modal-detail { max-width: 1100px; }
+.detail-split {
+  display: flex; gap: 24px;
+  max-height: calc(90vh - 260px);
+}
+.detail-left {
+  flex: 1; min-width: 0;
+  overflow-y: auto;
+}
+.detail-right {
+  flex: 1; min-width: 0;
+  overflow-y: auto;
+}
+.detail-divider {
+  width: 1px; background: var(--border); flex-shrink: 0;
+}
+.detail-bottom {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .modal-detail { max-width: 100%; }
+  .detail-split { flex-direction: column; max-height: none; gap: 16px; }
+  .detail-left, .detail-right { overflow-y: visible; }
+  .detail-divider { width: 100%; height: 1px; }
+}
+
 .subject-list-item {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 8px;
@@ -1403,66 +1433,77 @@ async function saveEntry(e) {
 // --- Detail Modal ---
 function openDetail(entry) {
   const body = document.getElementById('detailBody');
+  const hasAnswer = entry.answerText || (entry.answerImages && entry.answerImages.length > 0) || entry.answerImage;
   body.innerHTML = `
-    ${entry.screenshot ? `
-    <div class="detail-section">
-      <h4>📷 题目</h4>
-      <img class="detail-img" src="${entry.screenshot}" alt="题目截图" onclick="this.requestFullscreen?.()">
-    </div>` : ''}
-    <div class="detail-meta">
-      <span class="detail-tag">📚 ${escapeHtml(entry.subject)}</span>
-      <span class="detail-tag">📄 <span id="detailSourceName">${escapeHtml(entry.source || '未设置')}</span>
-        <button class="btn btn-sm btn-ghost" onclick="toggleSourceEdit(${entry.id})" style="padding:0 4px;font-size:11px;vertical-align:middle;border:none;background:none;cursor:pointer;text-decoration:underline;color:var(--primary);">✏️</button>
-      </span>
-      ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
-      <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
+    <div class="detail-split">
+      <div class="detail-left">
+        ${entry.screenshot ? `
+        <div class="detail-section">
+          <h4>📷 题目</h4>
+          <img class="detail-img" src="${entry.screenshot}" alt="题目截图" onclick="this.requestFullscreen?.()">
+        </div>` : ''}
+        <div class="detail-meta">
+          <span class="detail-tag">📚 ${escapeHtml(entry.subject)}</span>
+          <span class="detail-tag">📄 <span id="detailSourceName">${escapeHtml(entry.source || '未设置')}</span>
+            <button class="btn btn-sm btn-ghost" onclick="toggleSourceEdit(${entry.id})" style="padding:0 4px;font-size:11px;vertical-align:middle;border:none;background:none;cursor:pointer;text-decoration:underline;color:var(--primary);">✏️</button>
+          </span>
+          ${entry.errorReason ? `<span class="detail-tag">⚠️ ${escapeHtml(entry.errorReason)}</span>` : ''}
+          <span class="detail-tag">🕐 ${new Date(entry.createdAt).toLocaleString('zh-CN')}</span>
+        </div>
+        <div id="detailSourceEditor" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">修改题目来源</div>
+          <div class="subjects-grid" id="detailSourceChips"></div>
+        </div>
+        ${entry.hint || (entry.hintImages && entry.hintImages.length > 0) ? `
+        <div class="detail-section">
+          <h4>💡 提示</h4>
+          <div class="hint-blur-wrapper" id="hintWrapper">
+            ${entry.hint ? `<div class="hint-text">${escapeHtml(entry.hint)}</div>` : ''}
+            ${entry.hintImages && entry.hintImages.length > 0 ? `<div class="hint-media">${entry.hintImages.map(img => `<img src="${img}" alt="提示图片">`).join('')}</div>` : ''}
+            <div class="hint-blur-overlay" onclick="revealHint()">
+              <button class="overlay-btn">👁️ 查看提示</button>
+            </div>
+          </div>
+        </div>` : ''}
+      </div>
+      <div class="detail-divider"></div>
+      <div class="detail-right">
+        ${hasAnswer ? `
+        <div class="detail-section"><h4>🔒 答案</h4></div>
+        <div class="answer-blur-wrapper" id="answerWrapper">
+          ${entry.answerText ? `<div class="answer-text" id="answerTextContent">${escapeHtml(entry.answerText)}</div>` : ''}
+          ${(entry.answerImages && entry.answerImages.length > 0)
+            ? entry.answerImages.map((img, i) =>
+                `<img src="${img}" alt="答案截图${i+1}" style="margin-top:${(entry.answerText || i > 0) ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
+              ).join('')
+            : entry.answerImage
+              ? `<img src="${entry.answerImage}" alt="答案截图" style="margin-top:${entry.answerText ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
+              : ''}
+          <div class="answer-blur-overlay" id="answerOverlay" onclick="revealAnswer()">
+            <button class="overlay-btn">👁️ 点击查看答案</button>
+          </div>
+        </div>` : '<p style="color:var(--text-muted);font-size:14px;">未填写答案</p>'}
+      </div>
     </div>
-    <div id="detailSourceEditor" style="display:none;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">修改题目来源</div>
-      <div class="subjects-grid" id="detailSourceChips"></div>
-    </div>
-    ${entry.hint || (entry.hintImages && entry.hintImages.length > 0) ? `
-    <div class="detail-section">
-      <h4>💡 提示</h4>
-      <div class="hint-blur-wrapper" id="hintWrapper">
-        ${entry.hint ? `<div class="hint-text">${escapeHtml(entry.hint)}</div>` : ''}
-        ${entry.hintImages && entry.hintImages.length > 0 ? `<div class="hint-media">${entry.hintImages.map(img => `<img src="${img}" alt="提示图片">`).join('')}</div>` : ''}
-        <div class="hint-blur-overlay" onclick="revealHint()">
-          <button class="overlay-btn">👁️ 查看提示</button>
+    <div class="detail-bottom">
+      <div class="detail-review-stats" id="reviewSection">
+        <h4>📊 复习记录</h4>
+        <div class="stat" id="reviewStatText">${getReviewStatsText(reviewStatsCache[entry.id])}</div>
+        <div class="review-btns">
+          <button class="btn btn-correct" onclick="recordReview(${entry.id}, true)">✓ 标记正确</button>
+          <button class="btn btn-wrong" onclick="recordReview(${entry.id}, false)">✗ 标记错误</button>
         </div>
       </div>
-    </div>` : ''}
-    ${entry.answerText || (entry.answerImages && entry.answerImages.length > 0) || entry.answerImage ? `
-    <div class="answer-box">
-      <div class="detail-section"><h4>🔒 答案</h4></div>
-      <div class="answer-blur-wrapper" id="answerWrapper">
-        ${entry.answerText ? `<div class="answer-text" id="answerTextContent">${escapeHtml(entry.answerText)}</div>` : ''}
-        ${(entry.answerImages && entry.answerImages.length > 0)
-          ? entry.answerImages.map((img, i) =>
-              `<img src="${img}" alt="答案截图${i+1}" style="margin-top:${(entry.answerText || i > 0) ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
-            ).join('')
-          : entry.answerImage
-            ? `<img src="${entry.answerImage}" alt="答案截图" style="margin-top:${entry.answerText ? '8px' : '0'};width:100%;border-radius:var(--radius);">`
-            : ''}
-        <div class="answer-blur-overlay" id="answerOverlay" onclick="revealAnswer()">
-          <button class="overlay-btn">👁️ 点击查看答案</button>
-        </div>
+      <div class="form-actions" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="closeDetailModal();openEditModalById(${entry.id})">✏️ 编辑</button>
+        <button class="btn btn-danger" onclick="deleteEntry(${entry.id})">🗑️ 删除</button>
+        <button class="btn btn-ghost" onclick="closeDetailModal()">关闭</button>
       </div>
-    </div>` : '<p style="color:var(--text-muted);font-size:14px;">未填写答案</p>'}
-    <div class="detail-review-stats" id="reviewSection">
-      <h4>📊 复习记录</h4>
-      <div class="stat" id="reviewStatText">${getReviewStatsText(reviewStatsCache[entry.id])}</div>
-      <div class="review-btns">
-        <button class="btn btn-correct" onclick="recordReview(${entry.id}, true)">✓ 标记正确</button>
-        <button class="btn btn-wrong" onclick="recordReview(${entry.id}, false)">✗ 标记错误</button>
-      </div>
-    </div>
-    <div class="form-actions" style="margin-top:16px;">
-      <button class="btn btn-primary" onclick="closeDetailModal();openEditModalById(${entry.id})">✏️ 编辑</button>
-      <button class="btn btn-danger" onclick="deleteEntry(${entry.id})">🗑️ 删除</button>
-      <button class="btn btn-ghost" onclick="closeDetailModal()">关闭</button>
     </div>
   `;
+  // Wider modal for side-by-side layout
+  const modal = body.closest('.modal');
+  modal.classList.add('modal-detail');
   document.getElementById('detailModal').style.display = 'flex';
 }
 
@@ -1518,6 +1559,7 @@ async function setDetailSource(entryId, source) {
 
 function closeDetailModal() {
   document.getElementById('detailModal').style.display = 'none';
+  document.querySelector('#detailModal .modal').classList.remove('modal-detail');
   renderAll();
 }
 
