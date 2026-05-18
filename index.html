@@ -737,6 +737,8 @@ async function dbAddSource(name) {
 }
 
 async function dbDeleteSource(name) {
+  // Delete all entries with this source
+  await supFetch(`/rest/v1/entries?source=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
   await supFetch(`/rest/v1/sources?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
