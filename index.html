@@ -737,12 +737,6 @@ async function dbAddSource(name) {
 }
 
 async function dbDeleteSource(name) {
-  // Clear source field for entries with this source
-  await supFetch(`/rest/v1/entries?source=eq.${encodeURIComponent(name)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ source: '' })
-  });
   await supFetch(`/rest/v1/sources?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
