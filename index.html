@@ -1589,6 +1589,22 @@ function invalidateCache() {
   screenshotPrefetchDone = false;
 }
 
+// Temporary cleanup: remove entries with empty source (legacy data after source deletion bug)
+let cleanupDone = false;
+async function cleanupEmptySourceEntries() {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  try {
+    const empty = entriesCache.filter(e => !e.source);
+    if (empty.length === 0) return;
+    await Promise.all(empty.map(e => dbDelete(e.id)));
+    console.log(`Cleaned up ${empty.length} entries with empty source`);
+    entriesCache = null;
+  } catch (err) {
+    console.warn('Cleanup failed:', err);
+  }
+}
+
 // --- Render ---
 async function renderAll() {
   try {
@@ -1605,6 +1621,8 @@ async function renderAll() {
     }
     entryCache.clear();
     entriesCache.forEach(e => entryCache.set(e.id, e));
+    // Cleanup: remove entries with empty source (legacy data)
+    await cleanupEmptySourceEntries();
     // Sync toggle button text with display mode
     const toggleBtn = document.getElementById('displayToggle');
     if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
