@@ -1597,9 +1597,12 @@ async function cleanupEmptySourceEntries() {
   try {
     const empty = entriesCache.filter(e => !e.source);
     if (empty.length === 0) return;
-    await Promise.all(empty.map(e => dbDelete(e.id)));
+    const ids = empty.map(e => e.id);
+    await supFetch(`/rest/v1/entries?id=in.(${ids.join(',')})`, { method: 'DELETE' });
     console.log(`Cleaned up ${empty.length} entries with empty source`);
+    // Refresh data
     entriesCache = null;
+    reviewStatsCache = null;
   } catch (err) {
     console.warn('Cleanup failed:', err);
   }
@@ -1623,6 +1626,14 @@ async function renderAll() {
     entriesCache.forEach(e => entryCache.set(e.id, e));
     // Cleanup: remove entries with empty source (legacy data)
     await cleanupEmptySourceEntries();
+    // If cleanup invalidated caches, re-fetch before rendering
+    if (entriesCache === null) {
+      [subjects, entriesCache, reviewStatsCache] = await Promise.all([
+        dbGetSubjects(),
+        dbGetList(),
+        dbGetReviewStats()
+      ]);
+    }
     // Sync toggle button text with display mode
     const toggleBtn = document.getElementById('displayToggle');
     if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
