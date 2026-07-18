@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cuotiben-v4';
+const CACHE_NAME = 'cuotiben-v5';
 const PRE_CACHE = [
   'manifest.json'
 ];

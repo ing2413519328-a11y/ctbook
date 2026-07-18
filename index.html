@@ -307,132 +307,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .source-chip:hover { border-color: var(--primary); color: var(--primary); }
 .source-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-/* Setup screen */
-.setup-container {
-  max-width: 440px; margin: 60px auto; padding: 32px;
-  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow-md);
-}
-.setup-container h2 { font-size: 20px; margin-bottom: 8px; }
-.setup-container .subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
-.setup-container code {
-  background: var(--bg); padding: 2px 6px; border-radius: 4px;
-  font-size: 12px; border: 1px solid var(--border);
-}
-.setup-container ol { padding-left: 18px; margin: 12px 0 20px; font-size: 13px; color: var(--text-muted); line-height: 1.8; }
-.setup-container ol a { color: var(--primary); }
-
-@media (max-width: 768px) {
-  .app { flex-direction: column; }
-  .sidebar { width: 100%; flex-shrink: 0; flex-direction: column; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
-  .sidebar-header { padding: 12px 16px; font-size: 18px; }
-  .sidebar-nav { display: flex; flex-wrap: wrap; padding: 4px 8px; gap: 4px; align-content: flex-start; }
-  .sidebar-nav .item { width: auto; flex-shrink: 0; white-space: nowrap; padding: 8px 14px; font-size: 13px; }
-
-  .sidebar-footer { display: none; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-  .card-img { height: 120px; }
-  .toolbar { padding: 12px 16px; }
-  .toolbar h2 { font-size: 16px; }
-  .content { padding: 12px; }
-  .modal { max-width: 100%; border-radius: 16px 16px 0 0; margin-top: auto; max-height: 85dvh; }
-  .modal-body { padding: 16px; }
-  .modal-header { padding: 16px; }
-}
 </style>
 </head>
 <body>
-<!-- Setup screen (hidden after config) -->
-<div id="setupScreen" class="setup-container">
-  <h2>📒 配置错题本</h2>
-  <p class="subtitle">数据存储在 <a href="https://supabase.com" target="_blank">Supabase</a> 云数据库，电脑手机自动同步。</p>
-  <ol>
-    <li>注册 <a href="https://supabase.com" target="_blank">supabase.com</a> 免费账号</li>
-    <li>创建新项目，记下 <code>Project URL</code> 和 <code>anon key</code></li>
-    <li>进入 SQL Editor，运行下方 SQL 创建表</li>
-    <li>填入 URL 和 Key，点击保存</li>
-  </ol>
-  <details style="margin-bottom:20px;font-size:12px;">
-    <summary style="cursor:pointer;color:var(--primary);">📋 点击展开 SQL（复制到 Supabase SQL Editor 运行）</summary>
-    <pre id="setupSQL" style="background:var(--bg);padding:12px;border-radius:8px;overflow:auto;margin-top:8px;font-size:11px;line-height:1.5;border:1px solid var(--border);">CREATE TABLE subjects (
-  id SERIAL PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE sources (
-  id SERIAL PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE entries (
-  id SERIAL PRIMARY KEY,
-  subject TEXT NOT NULL,
-  source TEXT DEFAULT '',
-  error_reason TEXT DEFAULT '',
-  screenshot TEXT DEFAULT '',
-  answer_image TEXT DEFAULT '',
-  answer_images JSONB DEFAULT '[]'::jsonb,
-  answer_text TEXT DEFAULT '',
-  hint TEXT DEFAULT '',
-  hint_images JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE reviews (
-  id SERIAL PRIMARY KEY,
-  entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-  correct BOOLEAN NOT NULL,
-  reviewed_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "allow_all_subjects" ON subjects FOR ALL USING (true);
-CREATE POLICY "allow_all_sources" ON sources FOR ALL USING (true);
-CREATE POLICY "allow_all_entries" ON entries FOR ALL USING (true);
-CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
-
--- 如果你已经创建了表，只需要运行下面这几行：
--- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_text TEXT DEFAULT '';
--- ALTER TABLE entries ADD COLUMN IF NOT EXISTS answer_images JSONB DEFAULT '[]'::jsonb;
--- ALTER TABLE entries ADD COLUMN IF NOT EXISTS hint TEXT DEFAULT '';
--- ALTER TABLE entries ADD COLUMN IF NOT EXISTS hint_images JSONB DEFAULT '[]'::jsonb;
---
--- CREATE TABLE sources (
---   id SERIAL PRIMARY KEY,
---   name TEXT UNIQUE NOT NULL,
---   created_at TIMESTAMPTZ DEFAULT NOW()
--- );
--- ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "allow_all_sources" ON sources FOR ALL USING (true);
---
--- CREATE TABLE reviews (
---   id SERIAL PRIMARY KEY,
---   entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
---   correct BOOLEAN NOT NULL,
---   reviewed_at TIMESTAMPTZ DEFAULT NOW()
--- );
--- ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);</pre>
-  </details>
-  <div class="form-group">
-    <label>Supabase Project URL</label>
-    <input type="text" id="supabaseUrl" placeholder="https://xxxxx.supabase.co">
-  </div>
-  <div class="form-group">
-    <label>Supabase Anon Key</label>
-    <input type="text" id="supabaseKey" placeholder="eyJhbG...">
-  </div>
-  <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;justify-content:center;">保存并开始使用</button>
-  <p id="setupError" style="color:var(--danger);font-size:13px;margin-top:8px;display:none;"></p>
-</div>
-
-<!-- Main app (hidden until config saved) -->
-<div class="app" id="mainApp" style="display:none;">
+<div class="app" id="mainApp">
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="brand"><span class="icon">📒</span>错题本</span>
@@ -599,83 +477,17 @@ CREATE POLICY "allow_all_reviews" ON reviews FOR ALL USING (true);
 </div>
 
 <script>
-// --- Config ---
-const CONFIG_KEY = 'cuotiben_config';
+// --- Local API client ---
+const API_BASE = window.location.origin + '/api';
 
-function getConfig() {
-  const raw = localStorage.getItem(CONFIG_KEY);
-  return raw ? JSON.parse(raw) : null;
-}
-
-function saveConfig() {
-  const url = document.getElementById('supabaseUrl').value.trim();
-  const key = document.getElementById('supabaseKey').value.trim();
-  const errEl = document.getElementById('setupError');
-  if (!url || !key) { errEl.textContent = '请填写 URL 和 Key'; errEl.style.display = 'block'; return; }
-  if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
-    errEl.textContent = 'URL 格式不对，应该类似 https://xxxxx.supabase.co'; errEl.style.display = 'block'; return;
-  }
-  if (key.length < 20) {
-    errEl.textContent = 'Key 太短了，检查是否复制完整'; errEl.style.display = 'block'; return;
-  }
-  localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: url.replace(/\/$/, ''), key }));
-  errEl.style.display = 'none';
-  // Test connection
-  const btn = document.querySelector('#setupScreen .btn-primary');
-  btn.textContent = '验证中...';
-  btn.disabled = true;
-  testConnection(url, key).then(ok => {
-    if (ok) initApp();
-    else {
-      errEl.textContent = '连接失败，检查 URL 和 Key 是否正确';
-      errEl.style.display = 'block';
-      btn.textContent = '保存并开始使用';
-      btn.disabled = false;
-    }
-  });
-}
-
-async function testConnection(url, key) {
-  try {
-    const res = await fetch(`${url.replace(/\/$/, '')}/rest/v1/subjects?select=name&limit=1`, {
-      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
-function clearConfig() {
-  localStorage.removeItem(CONFIG_KEY);
-  location.reload();
-}
-
-// --- Supabase REST client ---
-let SUPABASE_URL = '';
-let SUPABASE_KEY = '';
-
-function initSupabase() {
-  const config = getConfig();
-  if (!config) return false;
-  SUPABASE_URL = config.url;
-  SUPABASE_KEY = config.key;
-  return true;
-}
-
-async function supFetch(path, options = {}) {
+async function apiFetch(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
-  // Safari may strip custom headers on cross-origin requests, so pass apikey as URL param too
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${SUPABASE_URL}${path}${sep}apikey=${encodeURIComponent(SUPABASE_KEY)}`;
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       signal: controller.signal,
       headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
         ...(options.headers || {})
       }
@@ -686,11 +498,10 @@ async function supFetch(path, options = {}) {
       err.status = res.status;
       throw err;
     }
-    if (res.status === 204 || res.status === 201) {
-      const text = await res.text();
-      return text ? JSON.parse(text) : null;
-    }
-    return res.json();
+    const ct = res.headers.get('content-type') || '';
+    if (res.status === 204) return null;
+    if (ct.includes('json')) return res.json();
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -698,16 +509,13 @@ async function supFetch(path, options = {}) {
 
 // --- Data layer ---
 async function dbGetSubjects() {
-  const data = await supFetch('/rest/v1/subjects?select=name&order=name.asc');
+  const data = await apiFetch('/subjects');
   return data.map(s => s.name);
 }
 
 async function dbAddSubject(name) {
   try {
-    await supFetch('/rest/v1/subjects', {
-      method: 'POST',
-      body: JSON.stringify({ name })
-    });
+    await apiFetch('/subjects', { method: 'POST', body: JSON.stringify({ name }) });
   } catch (err) {
     if (err.status === 409) throw new Error('科目已存在');
     throw err;
@@ -715,21 +523,17 @@ async function dbAddSubject(name) {
 }
 
 async function dbDeleteSubject(name) {
-  await supFetch(`/rest/v1/entries?subject=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
-  await supFetch(`/rest/v1/subjects?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
+  await apiFetch(`/subjects/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 async function dbGetSources() {
-  const data = await supFetch('/rest/v1/sources?select=name&order=name.asc');
+  const data = await apiFetch('/sources');
   return data.map(s => s.name);
 }
 
 async function dbAddSource(name) {
   try {
-    await supFetch('/rest/v1/sources', {
-      method: 'POST',
-      body: JSON.stringify({ name })
-    });
+    await apiFetch('/sources', { method: 'POST', body: JSON.stringify({ name }) });
   } catch (err) {
     if (err.status === 409) throw new Error('来源已存在');
     throw err;
@@ -737,15 +541,12 @@ async function dbAddSource(name) {
 }
 
 async function dbDeleteSource(name) {
-  // Delete all entries with this source
-  await supFetch(`/rest/v1/entries?source=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
-  await supFetch(`/rest/v1/sources?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE' });
+  await apiFetch(`/sources/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 async function dbAdd(entry) {
-  const data = await supFetch('/rest/v1/entries?select=id', {
+  const data = await apiFetch('/entries', {
     method: 'POST',
-    headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify({
       subject: entry.subject,
       source: entry.source,
@@ -763,7 +564,7 @@ async function dbAdd(entry) {
 }
 
 async function dbGetList() {
-  const data = await supFetch('/rest/v1/entries?select=id,subject,source,error_reason,created_at&order=created_at.desc');
+  const data = await apiFetch('/entries');
   return data.map(e => ({
     id: e.id,
     subject: e.subject,
@@ -775,7 +576,7 @@ async function dbGetList() {
 }
 
 async function dbGetFullEntry(id) {
-  const data = await supFetch(`/rest/v1/entries?id=eq.${id}&select=*`);
+  const data = await apiFetch(`/entries/${id}`);
   if (data.length === 0) return null;
   const e = data[0];
   return {
@@ -793,37 +594,19 @@ async function dbGetFullEntry(id) {
   };
 }
 
-async function dbGetAll() {
-  const data = await supFetch('/rest/v1/entries?select=*&order=created_at.desc');
-  return data.map(e => ({
-    id: e.id,
-    subject: e.subject,
-    source: e.source || '',
-    errorReason: e.error_reason || '',
-    screenshot: e.screenshot || '',
-    answerImage: e.answer_image || '',
-    answerImages: e.answer_images || [],
-    answerText: e.answer_text || '',
-    hint: e.hint || '',
-    hintImages: e.hint_images || [],
-    createdAt: new Date(e.created_at).getTime(),
-  }));
-}
-
 async function dbDelete(id) {
-  await supFetch(`/rest/v1/entries?id=eq.${id}`, { method: 'DELETE' });
+  await apiFetch(`/entries/${id}`, { method: 'DELETE' });
 }
 
 async function dbUpdateEntry(id, updates) {
-  await supFetch(`/rest/v1/entries?id=eq.${id}`, {
+  await apiFetch(`/entries/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
     body: JSON.stringify(updates),
   });
 }
 
 async function dbAddReview(entryId, correct) {
-  await supFetch('/rest/v1/reviews', {
+  await apiFetch('/reviews', {
     method: 'POST',
     body: JSON.stringify({
       entry_id: entryId,
@@ -835,7 +618,7 @@ async function dbAddReview(entryId, correct) {
 
 async function dbGetReviewStats() {
   try {
-    const data = await supFetch('/rest/v1/reviews?select=entry_id,correct');
+    const data = await apiFetch('/reviews');
     const stats = {};
     data.forEach(r => {
       const eid = r.entry_id;
@@ -848,6 +631,9 @@ async function dbGetReviewStats() {
     return {};
   }
 }
+
+// Screenshot prefetch (no longer needed with local SQLite)
+async function prefetchScreenshots() {}
 
 // --- Network status ---
 function updateSyncStatus() {
@@ -878,9 +664,6 @@ async function clearSWCache() {
   location.reload();
 }
 
-// Detect iOS PWA standalone mode
-const IS_IOS_PWA = window.navigator.standalone === true;
-
 // --- App state ---
 let reviewStatsCache = {};
 let entriesCache = null;
@@ -902,21 +685,13 @@ if (sortMode === 'time') { sortMode = 'time-desc'; localStorage.setItem('cuotibe
 let initLoadTimer = null;
 
 function initApp() {
-  if (!initSupabase()) {
-    document.getElementById('setupScreen').style.display = '';
-    document.getElementById('mainApp').style.display = 'none';
-    return;
-  }
-  document.getElementById('setupScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'flex';
   updateSyncStatus();
   // Safety timeout: show retry UI if loading takes >15s
   initLoadTimer = setTimeout(() => {
     const content = document.getElementById('content');
     if (content && content.querySelector('.empty p')?.textContent === '加载中...') {
-      content.innerHTML = `<div class="empty"><span class="icon">⏱️</span><p>加载超时，请检查网络和数据库配置</p>
+      content.innerHTML = `<div class="empty"><span class="icon">⏱️</span><p>服务器未启动？运行 <code>node server.js</code> 后重试</p>
         <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearConfig()">重新配置</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
         ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
       </div>`;
@@ -924,13 +699,8 @@ function initApp() {
   }, 15000);
   renderAll().catch(err => {
     console.error('Init error:', err);
-    const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
-    const isOffline = !navigator.onLine;
-    const msg = isOffline ? '当前处于离线状态，请检查网络连接后重试'
-      : isAuth ? 'API密钥无效或已过期，请重新配置'
-      : '加载失败: ' + escapeHtml(err.message);
+    const msg = '加载失败: ' + escapeHtml(err.message);
     document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
-      ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
       <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="location.reload()">刷新页面</button>
       ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
@@ -938,11 +708,9 @@ function initApp() {
   });
 }
 
-// Check config on load
-if (getConfig()) {
-  initApp();
-} else if (IS_IOS_PWA) {
-  // iOS PWA has separate storage from Safari — user may have configured in browser
+// Start app
+initApp();
+ — user may have configured in browser
   document.addEventListener('DOMContentLoaded', () => {
     const subtitle = document.querySelector('.subtitle');
     if (subtitle) {
@@ -1589,23 +1357,8 @@ function invalidateCache() {
   screenshotPrefetchDone = false;
 }
 
-// Temporary cleanup: remove entries with empty source (legacy data after source deletion bug)
-let cleanupDone = false;
-async function cleanupEmptySourceEntries() {
-  if (cleanupDone) return;
-  cleanupDone = true;
-  try {
-    const empty = entriesCache.filter(e => !e.source);
-    if (empty.length === 0) return;
-    const ids = empty.map(e => e.id);
-    await supFetch(`/rest/v1/entries?id=in.(${ids.join(',')})`, { method: 'DELETE' });
-    console.log(`Cleaned up ${empty.length} entries with empty source`);
-    // Refresh data
-    entriesCache = null;
-    reviewStatsCache = null;
-  } catch (err) {
-    console.warn('Cleanup failed:', err);
-  }
+function invalidateCache() {
+  entriesCache = null;
 }
 
 // --- Render ---
@@ -1624,16 +1377,6 @@ async function renderAll() {
     }
     entryCache.clear();
     entriesCache.forEach(e => entryCache.set(e.id, e));
-    // Cleanup: remove entries with empty source (legacy data)
-    await cleanupEmptySourceEntries();
-    // If cleanup invalidated caches, re-fetch before rendering
-    if (entriesCache === null) {
-      [subjects, entriesCache, reviewStatsCache] = await Promise.all([
-        dbGetSubjects(),
-        dbGetList(),
-        dbGetReviewStats()
-      ]);
-    }
     // Sync toggle button text with display mode
     const toggleBtn = document.getElementById('displayToggle');
     if (toggleBtn) toggleBtn.textContent = displayMode === 'image' ? '📋 列表模式' : '🖼️ 图片模式';
@@ -1648,22 +1391,15 @@ async function renderAll() {
     prefetchScreenshots();
   } catch (err) {
     console.error('Render error:', err);
-    const isAuth = err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('JWT'));
-    const isOffline = !navigator.onLine;
-    const isJsonError = err.message && (err.message.includes('JSON') || err.message.includes('Unexpected token') || err.message.includes('Unterminated'));
-    const msg = isOffline ? '当前处于离线状态，请检查网络连接后重试'
-      : isAuth ? 'API密钥无效或已过期，请重新配置'
-      : isJsonError ? '数据加载失败，可能是数据库中的图片过大。已优化图片上传，请<strong>清除缓存并刷新</strong>后重试'
-      : '加载失败: ' + escapeHtml(err.message);
+    const msg = '加载失败: ' + escapeHtml(err.message);
     document.getElementById('content').innerHTML = `<div class="empty"><span class="icon">⚠️</span><p>${msg}</p>
-      ${isAuth ? `<button class="btn btn-ghost btn-sm" onclick="clearConfig()">重新配置</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="invalidateCache();renderAll()">重试</button>
       ${navigator.serviceWorker ? '<button class="btn btn-ghost btn-sm" onclick="clearSWCache()">清除缓存并刷新</button>' : ''}
     </div>`;
   }
 }
 
-// Background prefetch screenshots for image mode — fetches in small batches to keep responses manageable
+// Background prefetch screenshots for image mode
 let screenshotPrefetchDone = false;
 async function prefetchScreenshots() {
   if (!entriesCache || screenshotPrefetchDone) return;
@@ -1674,23 +1410,12 @@ async function prefetchScreenshots() {
   for (let i = 0; i < uncached.length; i += chunkSize) {
     const chunk = uncached.slice(i, i + chunkSize);
     try {
-      const data = await supFetch(`/rest/v1/entries?select=id,screenshot&id=in.(${chunk.join(',')})`);
-      data.forEach(e => {
-        const cached = entryCache.get(e.id);
-        if (cached && e.screenshot) {
-          cached.screenshot = e.screenshot;
-          entryCache.set(e.id, cached);
-          // Also update entriesCache reference
-          const listEntry = entriesCache.find(le => le.id === e.id);
-          if (listEntry) listEntry.screenshot = e.screenshot;
-        }
-      });
-      // Re-render if in image mode and we have new data
-      if (displayMode === 'image' && data.some(d => d.screenshot)) {
-        renderList(entriesCache, reviewStatsCache);
-      }
+      const response = await fetch(`${API_BASE}/entries/${chunk[0]}`);
+      const data = await response.json();
+      screenshotPrefetchDone = true;
     } catch (err) {
-      console.warn('Screenshot prefetch batch failed:', err.message);
+      console.warn('Screenshot prefetch failed:', err.message);
+      screenshotPrefetchDone = true;
     }
   }
   screenshotPrefetchDone = true;
